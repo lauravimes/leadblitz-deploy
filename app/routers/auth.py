@@ -92,6 +92,14 @@ def logout():
     return response
 
 
+@router.get("/logout")
+def logout_get():
+    from fastapi.responses import RedirectResponse
+    response = RedirectResponse("/login", status_code=302)
+    response.delete_cookie("session")
+    return response
+
+
 @router.post("/forgot-password")
 def forgot_password(
     request: Request,

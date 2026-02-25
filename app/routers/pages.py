@@ -136,16 +136,24 @@ def sms_page(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/credits")
 def credits_page(request: Request, db: Session = Depends(get_db)):
-    user = get_current_user(request, db)
+    from app.models import UserCredits
     from app.services.stripe_client import CREDIT_PACKAGES, CREDIT_COSTS
     from app.config import get_settings
+    user = get_current_user(request, db)
     settings = get_settings()
+    credits = db.query(UserCredits).filter(UserCredits.user_id == user.id).first()
+    if not credits:
+        credits = UserCredits(user_id=user.id, balance=0, total_purchased=0, total_used=0)
+        db.add(credits)
+        db.commit()
+        db.refresh(credits)
     return _tpl(request).TemplateResponse(
         "pages/credits.html",
         {
             "request": request,
             "user": user,
             "active_page": "credits",
+            "credits": credits,
             "packages": CREDIT_PACKAGES,
             "costs": CREDIT_COSTS,
             "stripe_pk": settings.stripe_publishable_key,

@@ -1,5 +1,8 @@
 /* Landing page — LeadBlitz v2 */
 
+/* Smooth scroll offset for sticky nav */
+html{scroll-behavior:smooth;scroll-padding-top:60px}
+
 /* Layout */
 .landing-container{max-width:860px;margin:0 auto;padding:0 24px}
 
@@ -9,6 +12,11 @@
 .landing-nav-links{display:flex;gap:24px;align-items:center}
 .landing-nav-links a{color:var(--muted);text-decoration:none;font-size:.87rem;letter-spacing:.01em}
 .landing-nav-links a:hover{color:var(--text)}
+.landing-hamburger{display:none;background:none;border:none;cursor:pointer;padding:4px;flex-direction:column;gap:5px}
+.landing-hamburger span{display:block;width:22px;height:2px;background:var(--text);border-radius:1px;transition:transform .2s,opacity .2s}
+.landing-hamburger.open span:nth-child(1){transform:translateY(7px) rotate(45deg)}
+.landing-hamburger.open span:nth-child(2){opacity:0}
+.landing-hamburger.open span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
 
 /* Hero */
 .hero{padding:80px 0 40px;text-align:center}
@@ -32,7 +40,8 @@
 .mockup{
   max-width:480px;margin:48px auto 0;text-align:left;
   border:1px solid var(--border);border-radius:var(--radius);
-  background:var(--card);overflow:hidden}
+  background:var(--card);overflow:hidden;
+  box-shadow:0 4px 24px rgba(0,0,0,.06)}
 .mockup-header{
   display:flex;align-items:center;justify-content:space-between;
   padding:16px 20px;border-bottom:1px solid var(--border)}
@@ -99,7 +108,7 @@
 .pricing-list{list-style:none;padding:0;margin-bottom:20px}
 .pricing-list li{padding:6px 0;font-size:.87rem;color:var(--muted);border-bottom:1px solid #f3f4f6}
 .pricing-list li:last-child{border-bottom:none}
-.pricing-list li::before{content:"  ";color:var(--green);margin-right:6px}
+.pricing-list li::before{content:"\2713";color:var(--green);margin-right:8px;font-weight:600}
 .pricing-footnote{text-align:center;font-size:.8rem;color:var(--muted);margin-top:20px}
 
 /* FAQ */
@@ -126,6 +135,18 @@
 
 /* Responsive */
 @media(max-width:600px){
+  .landing-hamburger{display:flex}
+  .landing-nav .landing-container{position:relative}
+  .landing-nav-links{
+    display:none;flex-direction:column;gap:0;
+    position:absolute;top:100%;left:0;right:0;
+    background:var(--card);border-bottom:1px solid var(--border);
+    padding:8px 0;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,.08);
+    margin-top:14px}
+  .landing-nav-links.open{display:flex}
+  .landing-nav-links a{padding:12px 24px;font-size:.93rem}
+  .landing-nav-links a:hover{background:#f8f8f8}
+  .landing-nav-links .btn{margin:8px 24px 12px;text-align:center}
   .hero{padding:48px 0 24px}
   .hero-title{font-size:2rem}
   .hero-sub br{display:none}
@@ -136,5 +157,5 @@
   .founding-banner{flex-direction:column;align-items:flex-start}
   .footer-top{flex-direction:column;gap:16px;align-items:flex-start}
   .section{padding:48px 0}
-  .landing-nav-links a:not(.btn){display:none}
+  .mockup{margin-top:32px}
 }

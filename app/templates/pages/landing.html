@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>LeadBlitz — Instant Website Audits That Sell For You</title>
+  <meta name="description" content="Find businesses with outdated websites. AI-score them in seconds. Generate professional audit reports that close deals.">
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/style.css">
   <link rel="stylesheet" href="/static/landing.css">
@@ -14,7 +15,10 @@
   <nav class="landing-nav">
     <div class="landing-container">
       <a href="/" class="logo">LeadBlitz</a>
-      <div class="landing-nav-links">
+      <button class="landing-hamburger" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+      <div class="landing-nav-links" id="landing-menu">
         <a href="#features">Features</a>
         <a href="#pricing">Pricing</a>
         <a href="#faq">FAQ</a>
@@ -206,5 +210,30 @@
     </div>
   </footer>
 
+  <script>
+  (function(){
+    /* Mobile hamburger */
+    var btn = document.querySelector('.landing-hamburger');
+    var menu = document.getElementById('landing-menu');
+    if(btn && menu){
+      btn.addEventListener('click', function(){
+        btn.classList.toggle('open');
+        menu.classList.toggle('open');
+      });
+    }
+    /* Smooth scroll for anchor links & close mobile menu */
+    document.querySelectorAll('a[href^="#"]').forEach(function(a){
+      a.addEventListener('click', function(e){
+        var target = document.querySelector(a.getAttribute('href'));
+        if(target){
+          e.preventDefault();
+          target.scrollIntoView({behavior:'smooth'});
+          if(menu) menu.classList.remove('open');
+          if(btn) btn.classList.remove('open');
+        }
+      });
+    });
+  })();
+  </script>
 </body>
 </html>

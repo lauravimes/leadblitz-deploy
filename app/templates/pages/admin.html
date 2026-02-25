@@ -8,7 +8,7 @@
 
 <div class="card">
   <h2>Add credits</h2>
-  <form hx-post="/api/admin/credits/add" hx-target="#admin-flash" hx-swap="innerHTML" style="margin-top:12px">
+  <form hx-post="/api/admin/credits/add" hx-target="#admin-flash" hx-swap="innerHTML" hx-on::after-request="refreshAdmin()" style="margin-top:12px">
     <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap">
       <div class="form-group" style="margin-bottom:0;flex:1;min-width:140px">
         <label>User ID</label>
@@ -25,7 +25,7 @@
 
 <div class="card">
   <h2>Set balance</h2>
-  <form hx-post="/api/admin/credits/set" hx-target="#admin-flash" hx-swap="innerHTML" style="margin-top:12px">
+  <form hx-post="/api/admin/credits/set" hx-target="#admin-flash" hx-swap="innerHTML" hx-on::after-request="refreshAdmin()" style="margin-top:12px">
     <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap">
       <div class="form-group" style="margin-bottom:0;flex:1;min-width:140px">
         <label>User ID</label>
@@ -48,4 +48,11 @@
     <p class="subtext">Loading...</p>
   </div>
 </div>
+
+<script>
+function refreshAdmin() {
+  htmx.ajax('GET', '/api/credits/balance', {target: '#nav-credits', swap: 'innerHTML'});
+  htmx.ajax('GET', '/api/admin/users', {target: '#user-list', swap: 'innerHTML'});
+}
+</script>
 {% endblock %}

@@ -1,20 +1,20 @@
 <div class="stats-grid">
-  <div class="card card-compact">
+  <a href="/leads" class="stat-link card card-compact">
     <p class="label">Total leads</p>
     <p style="font-size:1.6rem;font-weight:700">{{ total_leads }}</p>
-  </div>
-  <div class="card card-compact">
+  </a>
+  <a href="/leads?scored=1" class="stat-link card card-compact">
     <p class="label">Scored</p>
     <p style="font-size:1.6rem;font-weight:700">{{ scored_leads }}</p>
-  </div>
+  </a>
   <div class="card card-compact">
     <p class="label">Avg score</p>
     <p style="font-size:1.6rem;font-weight:700">{{ avg_score }}</p>
   </div>
-  <div class="card card-compact">
+  <a href="/campaigns" class="stat-link card card-compact">
     <p class="label">Campaigns</p>
     <p style="font-size:1.6rem;font-weight:700">{{ total_campaigns }}</p>
-  </div>
+  </a>
   <div class="card card-compact">
     <p class="label">Emails sent</p>
     <p style="font-size:1.6rem;font-weight:700">{{ emails_sent }}</p>

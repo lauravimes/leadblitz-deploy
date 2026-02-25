@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from app.deps import get_db, get_optional_user, get_current_user
 from app.models import User, Campaign, Lead
@@ -66,6 +67,7 @@ def leads_page(
     request: Request,
     stage: str = None,
     campaign_id: str = None,
+    scored: str = None,
     db: Session = Depends(get_db),
 ):
     user = get_current_user(request, db)
@@ -74,6 +76,8 @@ def leads_page(
         q = q.filter(Lead.stage == stage)
     if campaign_id:
         q = q.filter(Lead.campaign_id == campaign_id)
+    if scored == "1":
+        q = q.filter(Lead.score.isnot(None))
     leads = q.order_by(Lead.created_at.desc()).all()
 
     campaigns = (
@@ -91,7 +95,31 @@ def leads_page(
             "campaigns": campaigns,
             "stage_filter": stage,
             "campaign_filter": campaign_id,
+            "scored_filter": scored,
             "active_page": "leads",
+        },
+    )
+
+
+@router.get("/campaigns")
+def campaigns_page(request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    rows = (
+        db.query(Campaign, func.count(Lead.id).label("lead_count"))
+        .outerjoin(Lead, Lead.campaign_id == Campaign.id)
+        .filter(Campaign.user_id == user.id)
+        .group_by(Campaign.id)
+        .order_by(Campaign.created_at.desc())
+        .all()
+    )
+    campaigns = [{"campaign": c, "lead_count": cnt} for c, cnt in rows]
+    return _tpl(request).TemplateResponse(
+        "pages/campaigns.html",
+        {
+            "request": request,
+            "user": user,
+            "campaigns": campaigns,
+            "active_page": "campaigns",
         },
     )
 

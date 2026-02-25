@@ -17,11 +17,18 @@
         <span></span><span></span><span></span>
       </button>
       <div class="nav-links" id="nav-menu">
-        <a href="/dashboard" class="{{ 'active' if active_page == 'dashboard' }}">Dashboard</a>
-        <a href="/search" class="{{ 'active' if active_page == 'search' }}">Search</a>
-        <a href="/leads" class="{{ 'active' if active_page == 'leads' }}">Leads</a>
-        <a href="/email" class="{{ 'active' if active_page == 'email' }}">Email</a>
-        <a href="/sms" class="{{ 'active' if active_page == 'sms' }}">SMS</a>
+        <div class="nav-dropdown">
+          <button class="nav-dropdown-toggle {{ 'active' if active_page in ['dashboard','search','leads','email','sms','campaigns'] }}" type="button">
+            Tools <span class="caret">▾</span>
+          </button>
+          <div class="nav-dropdown-menu">
+            <a href="/dashboard" class="{{ 'active' if active_page == 'dashboard' }}">Dashboard</a>
+            <a href="/search" class="{{ 'active' if active_page == 'search' }}">Search</a>
+            <a href="/leads" class="{{ 'active' if active_page == 'leads' }}">Leads</a>
+            <a href="/email" class="{{ 'active' if active_page == 'email' }}">Email</a>
+            <a href="/sms" class="{{ 'active' if active_page == 'sms' }}">SMS</a>
+          </div>
+        </div>
         <a href="/credits" class="{{ 'active' if active_page == 'credits' }}">
           Credits <span class="credit-badge" id="nav-credits" hx-get="/api/credits/balance" hx-trigger="load" hx-swap="innerHTML">—</span>
         </a>
@@ -38,5 +45,20 @@
       {% block content %}{% endblock %}
     </div>
   </main>
+
+  <script>
+  (function(){
+    var toggle = document.querySelector('.nav-dropdown-toggle');
+    var menu = toggle && toggle.parentElement;
+    if(!toggle) return;
+    toggle.addEventListener('click', function(e){
+      e.stopPropagation();
+      menu.classList.toggle('open');
+    });
+    document.addEventListener('click', function(e){
+      if(!menu.contains(e.target)) menu.classList.remove('open');
+    });
+  })();
+  </script>
 </body>
 </html>

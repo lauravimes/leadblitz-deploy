@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Campaigns — LeadBlitz{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <h1>Campaigns</h1>
+  <a href="/search" class="btn btn-primary btn-sm">New search</a>
+</div>
+
+{% if campaigns %}
+<div class="card" style="padding:0">
+  {% for row in campaigns %}
+  <a href="/leads?campaign_id={{ row.campaign.id }}" class="campaign-row">
+    <div class="campaign-info">
+      <span class="campaign-name">{{ row.campaign.business_type }}</span>
+      <span class="subtext">in {{ row.campaign.location }}</span>
+    </div>
+    <div class="campaign-meta">
+      <span class="score score-none">{{ row.lead_count }} lead{{ 's' if row.lead_count != 1 }}</span>
+      <span class="subtext">{{ row.campaign.created_at.strftime('%b %d, %Y') }}</span>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+  <h2>No campaigns yet</h2>
+  <p>Run your first search to create a campaign.</p>
+  <a href="/search" class="btn btn-primary" style="margin-top:16px">Search leads</a>
+</div>
+{% endif %}
+{% endblock %}

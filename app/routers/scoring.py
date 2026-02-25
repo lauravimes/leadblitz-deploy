@@ -22,6 +22,8 @@ _batch_status: dict[str, dict] = {}
 
 @router.post("/score/{lead_id}")
 def score_lead(lead_id: str, request: Request, db: Session = Depends(get_db)):
+    from app.services.credits import credit_manager
+
     templates = request.app.state.templates
     user = get_current_user(request, db)
     settings = get_settings()
@@ -35,6 +37,13 @@ def score_lead(lead_id: str, request: Request, db: Session = Depends(get_db)):
     if not lead.website:
         return templates.TemplateResponse(
             "partials/error.html", {"request": request, "message": "No website to score"}
+        )
+
+    # Deduct 1 credit for AI scoring
+    ok, balance = credit_manager.deduct_credits(db, user.id, "ai_scoring", description=f"Score: {lead.name}")
+    if not ok:
+        return templates.TemplateResponse(
+            "partials/error.html", {"request": request, "message": f"Insufficient credits ({balance} available, 1 needed)"}
         )
 
     result = score_website_hybrid(
@@ -71,6 +80,7 @@ def score_lead(lead_id: str, request: Request, db: Session = Depends(get_db)):
 def _batch_score_worker(lead_ids: list[str], user_id: int, batch_id: str):
     """Background thread that scores leads one by one."""
     from app.database import SessionLocal
+    from app.services.credits import credit_manager
 
     db = SessionLocal()
     settings = get_settings()
@@ -82,6 +92,14 @@ def _batch_score_worker(lead_ids: list[str], user_id: int, batch_id: str):
             if not lead or not lead.website:
                 status["skipped"] += 1
                 continue
+
+            # Deduct 1 credit per lead
+            ok, balance = credit_manager.deduct_credits(db, user_id, "ai_scoring", description=f"Score: {lead.name}")
+            if not ok:
+                status["failed"] += 1
+                status["status"] = "completed"
+                status["error"] = f"Insufficient credits ({balance} available)"
+                return
 
             try:
                 result = score_website_hybrid(db=db, url=lead.website, api_key=settings.openai_api_key)

@@ -50,7 +50,7 @@ TECHNOLOGY STACK DETECTED:
 - Google Analytics: {'Yes' if analytics.get('google_analytics') else 'No'}
 - Meta/Facebook Pixel: {'Yes' if analytics.get('meta_pixel') else 'No'}
 - Other Analytics: {', '.join(analytics.get('other', [])) or 'None'}
-- jQuery: {'Yes, version ' + jquery.get('version', 'unknown') if jquery.get('present') else 'No'}
+- jQuery: {'Yes, version ' + (jquery.get('version') or 'unknown') if jquery.get('present') else 'No'}
 - Cookie Consent: {'Yes' if technographics.get('cookie_consent') else 'No'}
 - Social Links: {', '.join(active_socials) if active_socials else 'None found'}
 - External Resources: {bloat.get('external_scripts', 0)} scripts, {bloat.get('external_stylesheets', 0)} stylesheets

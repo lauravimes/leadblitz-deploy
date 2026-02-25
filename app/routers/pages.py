@@ -18,7 +18,9 @@ def index(request: Request, db: Session = Depends(get_db)):
     user = get_optional_user(request, db)
     if user:
         return RedirectResponse("/dashboard", status_code=302)
-    return RedirectResponse("/login", status_code=302)
+    return _tpl(request).TemplateResponse(
+        "pages/landing.html", {"request": request, "user": None}
+    )
 
 
 @router.get("/login")

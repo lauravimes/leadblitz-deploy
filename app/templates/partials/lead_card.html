@@ -1,0 +1,25 @@
+<div class="lead-card" id="lead-{{ lead.id }}">
+  <div class="lead-info">
+    <div class="lead-name"><a href="/leads/{{ lead.id }}">{{ lead.name }}</a></div>
+    <div class="lead-meta">
+      {% if lead.address %}<span>{{ lead.address | truncate(50) }}</span>{% endif %}
+      {% if lead.phone %}<span>{{ lead.phone }}</span>{% endif %}
+      {% if lead.rating %}<span>{{ lead.rating }} ★</span>{% endif %}
+    </div>
+  </div>
+  <div class="lead-actions">
+    <span class="stage stage-{{ lead.stage }}">{{ lead.stage }}</span>
+    {% if lead.score is not none %}
+      <span class="score {{ 'score-high' if lead.score >= 70 else ('score-mid' if lead.score >= 40 else 'score-low') }}">{{ lead.score }}</span>
+    {% elif lead.website %}
+      <button class="btn btn-secondary btn-sm"
+              hx-post="/api/score/{{ lead.id }}"
+              hx-target="#lead-{{ lead.id }}"
+              hx-swap="outerHTML"
+              hx-indicator="#ind-{{ lead.id }}">Score</button>
+      <span id="ind-{{ lead.id }}" class="htmx-indicator">Analysing...</span>
+    {% else %}
+      <span class="score score-none">—</span>
+    {% endif %}
+  </div>
+</div>

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Register — LeadBlitz{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+  <h1>Create account</h1>
+  <div class="card">
+    <form hx-post="/auth/register" hx-target="#auth-error" hx-swap="innerHTML">
+      <div id="auth-error"></div>
+      <div class="form-group">
+        <label for="full_name">Full name</label>
+        <input type="text" id="full_name" name="full_name" required autofocus>
+      </div>
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" required>
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" required minlength="8">
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Create account</button>
+    </form>
+  </div>
+  <p class="auth-footer">Already have an account? <a href="/login">Sign in</a></p>
+</div>
+{% endblock %}

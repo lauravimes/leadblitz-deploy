@@ -1,0 +1,23 @@
+<div class="card" style="padding:0">
+  <div id="lead-list">
+    {% for lead in leads %}
+      {% include "partials/lead_card.html" %}
+    {% endfor %}
+  </div>
+</div>
+
+{% if next_page_token %}
+<div style="text-align:center;margin-top:16px">
+  <button class="btn btn-secondary"
+          hx-post="/api/search/more"
+          hx-target="#lead-list"
+          hx-swap="beforeend"
+          hx-vals='{"campaign_id":"{{ campaign_id }}","next_page_token":"{{ next_page_token }}"}'
+          hx-indicator="#more-indicator">
+    Load more
+  </button>
+  <span id="more-indicator" class="htmx-indicator">Loading...</span>
+</div>
+{% endif %}
+
+<p class="subtext" style="margin-top:12px">{{ leads | length }} leads found{% if next_page_token %} — more available{% endif %}</p>

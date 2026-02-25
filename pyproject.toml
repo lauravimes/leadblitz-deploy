@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "leadblitz-v2"
+version = "2.0.0"
+description = "Lead generation SaaS — Find, Score, Review"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "jinja2",
+    "sqlalchemy>=2.0",
+    "psycopg2-binary",
+    "alembic",
+    "pydantic-settings",
+    "python-dotenv",
+    "itsdangerous",
+    "passlib[bcrypt]",
+    "python-multipart",
+    "openai",
+    "requests",
+    "beautifulsoup4",
+    "httpx",
+]
+
+[project.optional-dependencies]
+dev = ["ruff", "pytest", "pytest-asyncio"]

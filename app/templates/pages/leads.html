@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Leads — LeadBlitz{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <h1>Leads</h1>
+  <span class="subtext">{{ leads | length }} total</span>
+</div>
+
+<div class="filter-bar">
+  <select onchange="window.location.href='/leads?stage=' + this.value">
+    <option value="" {{ 'selected' if not stage_filter }}>All stages</option>
+    <option value="new" {{ 'selected' if stage_filter == 'new' }}>New</option>
+    <option value="reviewing" {{ 'selected' if stage_filter == 'reviewing' }}>Reviewing</option>
+    <option value="qualified" {{ 'selected' if stage_filter == 'qualified' }}>Qualified</option>
+    <option value="rejected" {{ 'selected' if stage_filter == 'rejected' }}>Rejected</option>
+  </select>
+  {% if campaigns %}
+  <select onchange="window.location.href='/leads?campaign_id=' + this.value + '{% if stage_filter %}&stage={{ stage_filter }}{% endif %}'">
+    <option value="">All campaigns</option>
+    {% for c in campaigns %}
+    <option value="{{ c.id }}" {{ 'selected' if campaign_filter == c.id }}>{{ c.business_type }} in {{ c.location }}</option>
+    {% endfor %}
+  </select>
+  {% endif %}
+</div>
+
+<div class="card" style="padding:0">
+  <div id="lead-list">
+    {% if leads %}
+      {% for lead in leads %}
+        {% include "partials/lead_card.html" %}
+      {% endfor %}
+    {% else %}
+      {% include "partials/empty_state.html" %}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

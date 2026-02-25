@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}{{ lead.name }} — LeadBlitz{% endblock %}
+
+{% block content %}
+<a href="/leads" class="subtext" style="text-decoration:none">&larr; Back to leads</a>
+
+<div class="detail-header" style="margin-top:16px">
+  <div>
+    <h1>{{ lead.name }}</h1>
+    <div class="detail-meta">
+      {% if lead.address %}<span>{{ lead.address }}</span>{% endif %}
+      {% if lead.phone %}<span>{{ lead.phone }}</span>{% endif %}
+      {% if lead.website %}<a href="{{ lead.website }}" target="_blank" rel="noopener">{{ lead.website | truncate(40) }}</a>{% endif %}
+      {% if lead.rating %}<span>{{ lead.rating }} ★ ({{ lead.review_count }} reviews)</span>{% endif %}
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center">
+    {% if lead.score is not none %}
+      <span class="score {{ 'score-high' if lead.score >= 70 else ('score-mid' if lead.score >= 40 else 'score-low') }}">{{ lead.score }}</span>
+    {% else %}
+      {% if lead.website %}
+      <button class="btn btn-secondary btn-sm"
+              hx-post="/api/score/{{ lead.id }}" hx-target="#score-panel" hx-swap="innerHTML"
+              hx-indicator="#score-indicator">Score</button>
+      <span id="score-indicator" class="htmx-indicator">Analysing...</span>
+      {% else %}
+      <span class="score score-none">—</span>
+      {% endif %}
+    {% endif %}
+  </div>
+</div>
+
+<!-- Stage -->
+<div class="card">
+  <div style="display:flex;gap:16px;align-items:center">
+    <span class="label" style="margin-bottom:0">Stage</span>
+    <select style="width:auto;min-width:140px"
+            hx-patch="/api/leads/{{ lead.id }}/stage" hx-target="#stage-confirm" hx-swap="innerHTML"
+            name="stage">
+      <option value="new" {{ 'selected' if lead.stage == 'new' }}>New</option>
+      <option value="reviewing" {{ 'selected' if lead.stage == 'reviewing' }}>Reviewing</option>
+      <option value="qualified" {{ 'selected' if lead.stage == 'qualified' }}>Qualified</option>
+      <option value="rejected" {{ 'selected' if lead.stage == 'rejected' }}>Rejected</option>
+    </select>
+    <span id="stage-confirm"></span>
+  </div>
+</div>
+
+<!-- Notes -->
+<div class="card">
+  <p class="label">Notes</p>
+  <textarea name="notes"
+            hx-patch="/api/leads/{{ lead.id }}/notes" hx-trigger="keyup changed delay:500ms"
+            hx-target="#notes-confirm" hx-swap="innerHTML"
+            placeholder="Add notes about this lead...">{{ lead.notes or '' }}</textarea>
+  <span id="notes-confirm"></span>
+</div>
+
+<!-- Score breakdown -->
+<div id="score-panel">
+  {% if lead.score is not none %}
+    {% include "partials/score_detail.html" %}
+  {% endif %}
+</div>
+
+<!-- Delete -->
+<div style="margin-top:32px;text-align:right">
+  <button class="btn btn-danger btn-sm"
+          hx-delete="/api/leads/{{ lead.id }}" hx-confirm="Delete this lead?"
+          hx-target="body" hx-swap="innerHTML">Delete lead</button>
+</div>
+{% endblock %}

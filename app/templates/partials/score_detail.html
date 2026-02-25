@@ -1,0 +1,109 @@
+{% set breakdown = lead.score_breakdown or {} %}
+{% set heuristic = breakdown.get('breakdown', {}).get('heuristic', {}) %}
+{% set ai = breakdown.get('breakdown', {}).get('ai', {}) %}
+{% set report = breakdown.get('plain_english_report', {}) %}
+{% set tech = lead.technographics or {} %}
+
+<div class="card" style="margin-top:16px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <h2>Score breakdown</h2>
+    <span class="score {{ 'score-high' if lead.score >= 70 else ('score-mid' if lead.score >= 40 else 'score-low') }}" style="font-size:1.2rem">{{ lead.score }}/100</span>
+  </div>
+
+  <div style="display:flex;gap:24px;margin-bottom:16px">
+    <div>
+      <p class="label">Heuristic</p>
+      <span style="font-family:var(--mono);font-size:1.1rem;font-weight:600">{{ lead.heuristic_score or 0 }}/50</span>
+    </div>
+    <div>
+      <p class="label">AI</p>
+      <span style="font-family:var(--mono);font-size:1.1rem;font-weight:600">{{ lead.ai_score or 0 }}/50</span>
+    </div>
+  </div>
+
+  {% if heuristic %}
+  <p class="label">Technical checks</p>
+  <div class="breakdown-grid">
+    <div class="breakdown-item"><span class="breakdown-label">Mobile</span><span class="breakdown-score">{{ heuristic.get('mobile', 0) }}/10</span></div>
+    <div class="breakdown-item"><span class="breakdown-label">Security</span><span class="breakdown-score">{{ heuristic.get('security', 0) }}/10</span></div>
+    <div class="breakdown-item"><span class="breakdown-label">SEO</span><span class="breakdown-score">{{ heuristic.get('seo', 0) }}/8</span></div>
+    <div class="breakdown-item"><span class="breakdown-label">Contact</span><span class="breakdown-score">{{ heuristic.get('contact', 0) }}/8</span></div>
+    <div class="breakdown-item"><span class="breakdown-label">Content</span><span class="breakdown-score">{{ heuristic.get('content', 0) }}/8</span></div>
+    <div class="breakdown-item"><span class="breakdown-label">Tech</span><span class="breakdown-score">{{ heuristic.get('tech', 0) }}/6</span></div>
+  </div>
+  {% endif %}
+
+  {% if ai %}
+  <p class="label" style="margin-top:20px">AI review</p>
+  <div class="breakdown-grid">
+    <div class="breakdown-item"><span class="breakdown-label">Brand</span><span class="breakdown-score">{{ ai.get('brand', 0) }}/12</span></div>
+    <div class="breakdown-item"><span class="breakdown-label">Visual</span><span class="breakdown-score">{{ ai.get('visual', 0) }}/10</span></div>
+    <div class="breakdown-item"><span class="breakdown-label">Conversion</span><span class="breakdown-score">{{ ai.get('conversion', 0) }}/12</span></div>
+    <div class="breakdown-item"><span class="breakdown-label">Trust</span><span class="breakdown-score">{{ ai.get('trust', 0) }}/10</span></div>
+    <div class="breakdown-item"><span class="breakdown-label">Accessibility</span><span class="breakdown-score">{{ ai.get('a11y', 0) }}/6</span></div>
+  </div>
+  {% endif %}
+</div>
+
+{% if report %}
+<div class="card report-section">
+  <h3>Analysis</h3>
+
+  {% if report.get('strengths') %}
+  <p class="label" style="margin-top:12px">Strengths</p>
+  <ul class="report-list">
+    {% for item in report.get('strengths', []) %}
+    <li>{{ item }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  {% if report.get('weaknesses') %}
+  <p class="label" style="margin-top:12px">Weaknesses</p>
+  <ul class="report-list">
+    {% for item in report.get('weaknesses', []) %}
+    <li>{{ item }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  {% if report.get('sales_opportunities') %}
+  <p class="label" style="margin-top:12px">Sales opportunities</p>
+  <ul class="report-list">
+    {% for item in report.get('sales_opportunities', []) %}
+    <li>{{ item }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  {% if report.get('technology_observations') %}
+  <p class="label" style="margin-top:12px">Technology</p>
+  <p style="font-size:.9rem;line-height:1.5">{{ report.get('technology_observations', '') }}</p>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if tech and tech.get('detected') %}
+{% set health = classify_tech_health(tech) if classify_tech_health else {} %}
+<div class="card report-section">
+  <h3>Technographics</h3>
+  <div style="margin-top:10px">
+    {% set cms = tech.get('cms', {}) %}
+    {% if cms.get('name') and cms.get('name') != 'Custom/Unknown' %}
+    <p style="font-size:.9rem;margin-bottom:8px"><strong>CMS:</strong> {{ cms.get('name') }}{% if tech.get('cms_version') %} {{ tech.get('cms_version') }}{% endif %}</p>
+    {% endif %}
+
+    <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px">
+      {% for item in health.get('green', []) %}
+      <span class="tech-signal tech-green">{{ item.label }}</span>
+      {% endfor %}
+      {% for item in health.get('amber', []) %}
+      <span class="tech-signal tech-amber">{{ item.label }}</span>
+      {% endfor %}
+      {% for item in health.get('red', []) %}
+      <span class="tech-signal tech-red">{{ item.label }}</span>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}

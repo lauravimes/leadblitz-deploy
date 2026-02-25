@@ -162,11 +162,52 @@ def credits_page(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/credits/success")
-def payment_success_page(request: Request, db: Session = Depends(get_db)):
+def payment_success_page(request: Request, session_id: str = "", db: Session = Depends(get_db)):
     user = get_current_user(request, db)
+    credits_added = 0
+
+    if session_id:
+        import stripe
+        from app.config import get_settings
+        from app.services.credits import credit_manager
+        from app.models import Payment
+
+        settings = get_settings()
+        stripe.api_key = settings.stripe_secret_key
+
+        try:
+            session = stripe.checkout.Session.retrieve(session_id)
+            if session.payment_status == "paid":
+                metadata = session.get("metadata", {})
+                uid = int(metadata.get("user_id", 0))
+                credits_amount = int(metadata.get("credits", 0))
+                plan_name = metadata.get("plan_name", "")
+                amount_cents = int(metadata.get("amount_cents", 0))
+
+                if uid == user.id and credits_amount and not credit_manager.check_duplicate_session(db, session_id):
+                    credit_manager.add_credits(
+                        db, user.id, credits_amount,
+                        f"Purchased {plan_name} ({credits_amount} credits)",
+                        stripe_checkout_session_id=session_id,
+                    )
+                    payment = Payment(
+                        user_id=user.id,
+                        stripe_session_id=session_id,
+                        amount_cents=amount_cents,
+                        credits_purchased=credits_amount,
+                        plan_name=plan_name,
+                        status="completed",
+                    )
+                    db.add(payment)
+                    db.commit()
+                    credits_added = credits_amount
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Failed to verify Stripe session: {e}")
+
     return _tpl(request).TemplateResponse(
         "pages/payment_success.html",
-        {"request": request, "user": user, "active_page": "credits"},
+        {"request": request, "user": user, "active_page": "credits", "credits_added": credits_added},
     )
 
 

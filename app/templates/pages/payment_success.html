@@ -4,7 +4,11 @@
 {% block content %}
 <div style="text-align:center;padding:60px 0">
   <h1>Payment successful</h1>
+  {% if credits_added %}
+  <p class="subtext" style="margin-top:8px">{{ credits_added }} credits have been added to your account.</p>
+  {% else %}
   <p class="subtext" style="margin-top:8px">Your credits have been added to your account.</p>
+  {% endif %}
   <a href="/credits" class="btn btn-primary" style="margin-top:24px">View credits</a>
 </div>
 {% endblock %}

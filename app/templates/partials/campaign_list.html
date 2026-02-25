@@ -1,0 +1,21 @@
+{% if campaigns %}
+  {% for c in campaigns %}
+  <div class="card card-compact" style="display:flex;align-items:center;justify-content:space-between">
+    <div>
+      <span style="font-weight:600">{{ c.business_type }}</span>
+      <span class="subtext">in {{ c.location }}</span>
+      <span class="subtext" style="margin-left:8px">{{ c.created_at.strftime('%b %d') }}</span>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <a href="/leads?campaign_id={{ c.id }}" class="btn btn-secondary btn-sm">View leads</a>
+      <button class="btn btn-danger btn-sm"
+              hx-delete="/api/campaigns/{{ c.id }}"
+              hx-confirm="Delete this campaign and all its leads?"
+              hx-target="closest .card"
+              hx-swap="outerHTML">Delete</button>
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+<p class="subtext">No campaigns yet. <a href="/search">Run a search</a> to create one.</p>
+{% endif %}

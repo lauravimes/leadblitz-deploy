@@ -10,6 +10,7 @@
     <div class="detail-meta">
       {% if lead.address %}<span>{{ lead.address }}</span>{% endif %}
       {% if lead.phone %}<span>{{ lead.phone }}</span>{% endif %}
+      {% if lead.email %}<span>{{ lead.email }}{% if lead.email_source %} ({{ lead.email_source }}){% endif %}</span>{% endif %}
       {% if lead.website %}<a href="{{ lead.website }}" target="_blank" rel="noopener">{{ lead.website | truncate(40) }}</a>{% endif %}
       {% if lead.rating %}<span>{{ lead.rating }} ★ ({{ lead.review_count }} reviews)</span>{% endif %}
     </div>
@@ -56,12 +57,37 @@
   <span id="notes-confirm"></span>
 </div>
 
+<!-- Email enrichment -->
+{% if lead.website and not lead.email %}
+<div class="card">
+  <p class="label">Email enrichment</p>
+  <div style="display:flex;gap:8px;align-items:center">
+    <button class="btn btn-secondary btn-sm"
+            hx-post="/api/enrich/website" hx-vals='{"lead_ids":"{{ lead.id }}"}'
+            hx-target="#enrich-results" hx-indicator="#enrich-indicator">Scrape website</button>
+    <button class="btn btn-secondary btn-sm"
+            hx-post="/api/enrich/hunter" hx-vals='{"lead_ids":"{{ lead.id }}"}'
+            hx-target="#enrich-results" hx-indicator="#enrich-indicator">Hunter.io lookup</button>
+    <span id="enrich-indicator" class="htmx-indicator">Searching...</span>
+  </div>
+  <div id="enrich-results" style="margin-top:8px"></div>
+</div>
+{% endif %}
+
 <!-- Score breakdown -->
 <div id="score-panel">
   {% if lead.score is not none %}
     {% include "partials/score_detail.html" %}
   {% endif %}
 </div>
+
+<!-- Reports -->
+{% if lead.score is not none %}
+<div class="card">
+  <p class="label">Reports</p>
+  {% include "partials/report_actions.html" %}
+</div>
+{% endif %}
 
 <!-- Delete -->
 <div style="margin-top:32px;text-align:right">

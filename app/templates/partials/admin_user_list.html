@@ -1,0 +1,26 @@
+{% if users %}
+<div class="admin-table">
+  {% for u in users %}
+  <div class="admin-row">
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:600">{{ u.email }}</div>
+      <div class="subtext">
+        ID: {{ u.id }}
+        {% if u.name %}&middot; {{ u.name }}{% endif %}
+        &middot; {{ u.balance }} credits
+        {% if u.is_admin %}<span class="stage stage-qualified">admin</span>{% endif %}
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="btn btn-secondary btn-sm"
+              hx-post="/api/admin/toggle-admin"
+              hx-vals='{"user_id":"{{ u.id }}"}'
+              hx-target="closest .admin-row"
+              hx-swap="afterend">{{ 'Remove admin' if u.is_admin else 'Make admin' }}</button>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<p class="subtext">No users found.</p>
+{% endif %}

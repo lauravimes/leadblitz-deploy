@@ -1,0 +1,17 @@
+{% if transactions %}
+<div class="card" style="padding:0">
+  {% for t in transactions %}
+  <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 24px;border-bottom:1px solid #f3f4f6">
+    <div>
+      <span style="font-size:.87rem">{{ t.description }}</span>
+      <div class="subtext" style="font-size:.75rem">{{ t.created_at[:10] }}</div>
+    </div>
+    <span style="font-family:var(--mono);font-weight:600;font-size:.87rem;{{ 'color:var(--green)' if t.amount > 0 else 'color:var(--red)' }}">
+      {{ '+' if t.amount > 0 }}{{ t.amount }}
+    </span>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<p class="subtext">No transactions yet.</p>
+{% endif %}

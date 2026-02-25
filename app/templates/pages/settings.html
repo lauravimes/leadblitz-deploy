@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}Settings — LeadBlitz{% endblock %}
+
+{% block content %}
+<h1>Settings</h1>
+
+<div class="tabs" style="margin:24px 0 20px">
+  <button class="tab active" onclick="showTab('profile', this)">Profile</button>
+  <button class="tab" onclick="showTab('api-keys', this)">API Keys</button>
+  <button class="tab" onclick="showTab('email-provider', this)">Email Provider</button>
+</div>
+
+<!-- Profile Tab -->
+<div id="tab-profile" class="tab-content">
+  <div class="card">
+    <h2>Profile</h2>
+    <form hx-post="/api/settings/profile" hx-target="#profile-status" hx-swap="innerHTML" style="margin-top:16px">
+      <div class="form-group">
+        <label>Full name</label>
+        <input type="text" name="full_name" value="{{ user.full_name }}" required>
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" name="email" value="{{ user.email }}" required>
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm">Save</button>
+      <span id="profile-status" style="margin-left:12px"></span>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Change password</h2>
+    <form hx-post="/api/settings/password" hx-target="#pw-status" hx-swap="innerHTML" style="margin-top:16px">
+      <div class="form-group">
+        <label>Current password</label>
+        <input type="password" name="current_password" required>
+      </div>
+      <div class="form-group">
+        <label>New password</label>
+        <input type="password" name="new_password" required minlength="8">
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm">Update password</button>
+      <span id="pw-status" style="margin-left:12px"></span>
+    </form>
+  </div>
+</div>
+
+<!-- API Keys Tab -->
+<div id="tab-api-keys" class="tab-content" style="display:none">
+  <div class="card">
+    <h2>Twilio (SMS)</h2>
+    <form hx-post="/api/settings/api-keys" hx-target="#keys-status" hx-swap="innerHTML" style="margin-top:16px">
+      <div class="form-group">
+        <label>Account SID</label>
+        <input type="text" name="twilio_account_sid" placeholder="ACxxxxxxx">
+      </div>
+      <div class="form-group">
+        <label>Auth Token</label>
+        <input type="password" name="twilio_auth_token" placeholder="Enter to update">
+      </div>
+      <div class="form-group">
+        <label>Phone Number</label>
+        <input type="text" name="twilio_phone_number" placeholder="+1234567890">
+      </div>
+      <hr style="margin:16px 0;border:none;border-top:1px solid var(--border)">
+      <h2>Hunter.io (Email Enrichment)</h2>
+      <div class="form-group" style="margin-top:16px">
+        <label>API Key</label>
+        <input type="password" name="hunter_api_key" placeholder="Enter to update">
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm">Save API Keys</button>
+      <span id="keys-status" style="margin-left:12px"></span>
+    </form>
+  </div>
+</div>
+
+<!-- Email Provider Tab -->
+<div id="tab-email-provider" class="tab-content" style="display:none">
+  <div class="card">
+    <h2>Email provider</h2>
+    <p class="subtext" style="margin-bottom:16px">Configure how LeadBlitz sends emails on your behalf.</p>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px">
+      <a href="/api/settings/email/gmail/url" class="btn btn-secondary btn-sm">Connect Gmail</a>
+      <a href="/api/settings/email/outlook/url" class="btn btn-secondary btn-sm">Connect Outlook</a>
+    </div>
+
+    <h3 style="margin-top:24px">Or use SMTP</h3>
+    <form hx-post="/api/settings/email/smtp" hx-target="#email-status" hx-swap="innerHTML" style="margin-top:12px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-group">
+          <label>SMTP Host</label>
+          <input type="text" name="smtp_host" placeholder="smtp.gmail.com">
+        </div>
+        <div class="form-group">
+          <label>Port</label>
+          <input type="number" name="smtp_port" value="587">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Username</label>
+        <input type="text" name="smtp_username">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" name="smtp_password">
+      </div>
+      <div class="form-group">
+        <label>From Email</label>
+        <input type="email" name="smtp_from_email">
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm">Save SMTP</button>
+    </form>
+
+    <hr style="margin:24px 0;border:none;border-top:1px solid var(--border)">
+
+    <h3>Or use SendGrid</h3>
+    <form hx-post="/api/settings/email/sendgrid" hx-target="#email-status" hx-swap="innerHTML" style="margin-top:12px">
+      <div class="form-group">
+        <label>SendGrid API Key</label>
+        <input type="password" name="sendgrid_api_key">
+      </div>
+      <div class="form-group">
+        <label>From Email</label>
+        <input type="email" name="sendgrid_from_email">
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm">Save SendGrid</button>
+    </form>
+
+    <div style="margin-top:20px;display:flex;gap:12px;align-items:center">
+      <button class="btn btn-secondary btn-sm" hx-post="/api/settings/email/test" hx-target="#email-status" hx-swap="innerHTML">Send test email</button>
+      <button class="btn btn-danger btn-sm" hx-delete="/api/settings/email/disconnect" hx-target="#email-status" hx-swap="innerHTML">Disconnect</button>
+      <span id="email-status"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+function showTab(name, btn) {
+  document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + name).style.display = 'block';
+  btn.classList.add('active');
+}
+</script>
+{% endblock %}

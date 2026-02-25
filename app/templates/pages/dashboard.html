@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — LeadBlitz{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <h1>Dashboard</h1>
+</div>
+
+<div id="stats-area" hx-get="/api/stats" hx-trigger="load" hx-swap="innerHTML">
+  <p class="subtext">Loading stats...</p>
+</div>
+
+<div style="margin-top:24px">
+  <h2>Quick actions</h2>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px">
+    <a href="/search" class="btn btn-primary btn-sm">Search leads</a>
+    <a href="/import" class="btn btn-secondary btn-sm">Import CSV</a>
+    <a href="/email" class="btn btn-secondary btn-sm">Send emails</a>
+    <a href="/leads" class="btn btn-secondary btn-sm">View leads</a>
+  </div>
+</div>
+
+<div style="margin-top:32px">
+  <h2>Campaigns</h2>
+  <div id="campaign-list" hx-get="/api/campaigns" hx-trigger="load" hx-swap="innerHTML" style="margin-top:12px">
+    <p class="subtext">Loading...</p>
+  </div>
+</div>
+{% endblock %}

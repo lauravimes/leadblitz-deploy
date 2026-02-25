@@ -1,0 +1,14 @@
+{% if previews %}
+  {% for p in previews %}
+  <div class="card card-compact">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span style="font-weight:600">{{ p.lead.name }}</span>
+      <span class="subtext">{{ p.lead.email or 'No email' }}</span>
+    </div>
+    <p class="label">Subject: {{ p.subject }}</p>
+    <div style="font-size:.87rem;color:var(--muted);margin-top:4px;white-space:pre-line">{{ p.body }}</div>
+  </div>
+  {% endfor %}
+{% else %}
+  <p class="subtext">No leads to preview. Enter lead IDs above.</p>
+{% endif %}

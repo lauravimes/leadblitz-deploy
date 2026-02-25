@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}SMS — LeadBlitz{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <h1>SMS outreach</h1>
+  <span class="subtext">2 credits per SMS</span>
+</div>
+
+<div class="card">
+  <h2>Compose SMS</h2>
+  <p class="subtext" style="margin-bottom:16px">Use {{business_name}}, {{city}}, {{score}} as variables</p>
+  <form id="sms-form" style="margin-top:16px">
+    <div class="form-group">
+      <label>Message template</label>
+      <textarea name="template" id="sms-template" rows="4" placeholder="Hi {{business_name}}, I noticed your website could use some updates. I help businesses in {{city}} grow online. Interested in a free chat?"></textarea>
+    </div>
+    <div class="form-group">
+      <label>Lead IDs (comma separated)</label>
+      <input type="text" name="lead_ids" id="sms-lead-ids">
+    </div>
+    <div style="display:flex;gap:8px">
+      <button type="button" class="btn btn-secondary btn-sm"
+              hx-post="/api/sms/preview"
+              hx-include="#sms-form"
+              hx-target="#sms-preview">Preview</button>
+      <button type="button" class="btn btn-primary btn-sm"
+              hx-post="/api/sms/send"
+              hx-include="#sms-form"
+              hx-target="#sms-status"
+              hx-confirm="Send SMS to selected leads? (2 credits each)">Send</button>
+    </div>
+    <span id="sms-status" style="margin-left:12px"></span>
+  </form>
+</div>
+
+<div id="sms-preview" style="margin-top:16px"></div>
+{% endblock %}

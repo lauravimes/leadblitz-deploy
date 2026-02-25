@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Admin — LeadBlitz{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <h1>Admin</h1>
+</div>
+
+<div class="card">
+  <h2>Add credits to user</h2>
+  <form hx-post="/api/admin/credits/add" hx-target="#admin-flash" hx-swap="innerHTML" style="margin-top:12px">
+    <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap">
+      <div class="form-group" style="margin-bottom:0;flex:1;min-width:200px">
+        <label>User ID</label>
+        <input type="text" name="user_id" required placeholder="e.g. 1">
+      </div>
+      <div class="form-group" style="margin-bottom:0;width:120px">
+        <label>Credits</label>
+        <input type="text" name="amount" required placeholder="e.g. 100">
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm">Add credits</button>
+    </div>
+  </form>
+  <div id="admin-flash" style="margin-top:8px"></div>
+</div>
+
+<div class="card">
+  <h2>Users</h2>
+  <div id="user-list" hx-get="/api/admin/users" hx-trigger="load" hx-swap="innerHTML" style="margin-top:12px">
+    <p class="subtext">Loading...</p>
+  </div>
+</div>
+{% endblock %}

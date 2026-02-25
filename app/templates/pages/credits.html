@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Credits — LeadBlitz{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <h1>Credits</h1>
+  <span class="credit-badge">{{ credits.balance }} credits</span>
+</div>
+
+<div class="card">
+  <p class="label">Your balance</p>
+  <div style="display:flex;gap:24px;margin-top:8px">
+    <div>
+      <span style="font-size:2rem;font-weight:700">{{ credits.balance }}</span>
+      <span class="subtext"> credits available</span>
+    </div>
+  </div>
+  <div class="subtext" style="margin-top:8px">
+    Purchased: {{ credits.total_purchased }} &middot; Used: {{ credits.total_used }}
+  </div>
+</div>
+
+<h2 style="margin-top:32px;margin-bottom:16px">Buy credits</h2>
+
+<div class="packages-grid">
+  {% for pkg_id, pkg in packages.items() %}
+  <div class="card card-compact">
+    <h3>{{ pkg.name }}</h3>
+    <p class="subtext" style="margin-bottom:12px">{{ pkg.description }}</p>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <span style="font-weight:700;font-size:1.1rem">${{ "%.2f" | format(pkg.price_cents / 100) }}</span>
+      <button class="btn btn-primary btn-sm"
+              hx-post="/api/credits/checkout"
+              hx-vals='{"package_id": "{{ pkg_id }}"}'
+              hx-target="#checkout-error"
+              hx-swap="innerHTML"
+              onclick="handleCheckout(event, this)">Buy</button>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+<div id="checkout-error"></div>
+
+<h2 style="margin-top:32px;margin-bottom:16px">Credit costs</h2>
+<div class="card">
+  <table style="width:100%;font-size:.87rem">
+    <tbody>
+      {% for action, cost in costs.items() %}
+      <tr style="border-bottom:1px solid #f3f4f6">
+        <td style="padding:8px 0">{{ action | replace('_', ' ') | title }}</td>
+        <td style="padding:8px 0;text-align:right;font-family:var(--mono)">{{ cost }} credit{{ 's' if cost != 1 }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<h2 style="margin-top:32px;margin-bottom:16px">Transaction history</h2>
+<div id="transaction-list" hx-get="/api/credits/history" hx-trigger="load" hx-swap="innerHTML">
+  <span class="htmx-indicator">Loading...</span>
+</div>
+
+<script>
+function handleCheckout(e, btn) {
+  e.preventDefault();
+  const pkg = btn.getAttribute('hx-vals');
+  fetch('/api/credits/checkout', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: 'package_id=' + JSON.parse(pkg).package_id
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.url) window.location.href = data.url;
+    else if (data.error) document.getElementById('checkout-error').innerHTML = '<div class="error-msg">' + data.error + '</div>';
+  });
+  return false;
+}
+</script>
+{% endblock %}

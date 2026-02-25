@@ -23,6 +23,10 @@ dependencies = [
     "requests",
     "beautifulsoup4",
     "httpx",
+    "cryptography",
+    "stripe",
+    "twilio",
+    "reportlab",
 ]
 
 [tool.setuptools.packages.find]

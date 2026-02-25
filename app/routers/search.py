@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Request, Depends, Form
+from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy.orm import Session
 
 from app.deps import get_db, get_current_user
@@ -166,3 +167,34 @@ def search_more(
     return templates.TemplateResponse(
         "partials/lead_list.html", {"request": request, "leads": leads}
     )
+
+
+@router.get("/campaigns")
+def list_campaigns(request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    campaigns = (
+        db.query(Campaign)
+        .filter(Campaign.user_id == user.id)
+        .order_by(Campaign.created_at.desc())
+        .all()
+    )
+    templates = request.app.state.templates
+    return templates.TemplateResponse(
+        "partials/campaign_list.html",
+        {"request": request, "campaigns": campaigns},
+    )
+
+
+@router.delete("/campaigns/{campaign_id}")
+def delete_campaign(campaign_id: str, request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    campaign = db.query(Campaign).filter(
+        Campaign.id == campaign_id, Campaign.user_id == user.id
+    ).first()
+    if not campaign:
+        return HTMLResponse('<div class="error-msg">Campaign not found</div>', status_code=404)
+
+    db.query(Lead).filter(Lead.campaign_id == campaign_id).delete()
+    db.delete(campaign)
+    db.commit()
+    return HTMLResponse('<span class="saved-flash">Campaign deleted</span>')

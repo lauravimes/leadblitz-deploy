@@ -1,0 +1,31 @@
+{% if results %}
+  {% for r in results %}
+  <div class="card card-compact" style="display:flex;justify-content:space-between;align-items:center">
+    <div>
+      <span style="font-weight:600">{{ r.lead.name }}</span>
+      {% if r.status == 'found' %}
+        <span class="stage stage-qualified" style="margin-left:8px">Found</span>
+      {% elif r.status == 'no_website' %}
+        <span class="stage stage-new" style="margin-left:8px">No website</span>
+      {% else %}
+        <span class="stage stage-rejected" style="margin-left:8px">Not found</span>
+      {% endif %}
+    </div>
+    <div style="text-align:right">
+      {% if r.emails %}
+        {% for e in r.emails[:3] %}
+          {% if e is string %}
+            <div class="subtext">{{ e }}</div>
+          {% else %}
+            <div class="subtext">{{ e.email }} ({{ "%.0f"|format(e.confidence * 100) }}%)</div>
+          {% endif %}
+        {% endfor %}
+      {% else %}
+        <span class="subtext">—</span>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <p class="subtext">No results.</p>
+{% endif %}

@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Email — LeadBlitz{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <h1>Email outreach</h1>
+</div>
+
+<div class="card">
+  <h2>Compose</h2>
+  <form id="email-form" style="margin-top:16px">
+    <div class="form-group">
+      <label>Subject</label>
+      <input type="text" name="subject" id="email-subject" placeholder="Hi {{business_name}} — quick question" value="">
+    </div>
+    <div class="form-group">
+      <label>Body (HTML supported, use {{business_name}} and {{website}} as variables)</label>
+      <textarea name="body" id="email-body" rows="8" placeholder="Write your email..."></textarea>
+    </div>
+    <div class="form-group">
+      <label>Lead IDs (comma separated)</label>
+      <input type="text" name="lead_ids" id="email-lead-ids" placeholder="Select leads from the Leads page">
+    </div>
+    <div style="display:flex;gap:8px">
+      <button type="button" class="btn btn-secondary btn-sm"
+              hx-post="/api/email/preview"
+              hx-include="#email-form"
+              hx-target="#email-preview">Preview</button>
+      <button type="button" class="btn btn-primary btn-sm"
+              hx-post="/api/email/send"
+              hx-include="#email-form"
+              hx-target="#email-status"
+              hx-confirm="Send emails to selected leads?">Send</button>
+    </div>
+    <span id="email-status" style="margin-left:12px"></span>
+  </form>
+</div>
+
+<div id="email-preview" style="margin-top:16px"></div>
+
+<div class="card" style="margin-top:32px">
+  <h2>Signature</h2>
+  <form hx-post="/api/email/signatures" hx-target="#sig-status" hx-swap="innerHTML" style="margin-top:16px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group">
+        <label>Full Name</label>
+        <input type="text" name="full_name">
+      </div>
+      <div class="form-group">
+        <label>Position</label>
+        <input type="text" name="position">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Company Name</label>
+      <input type="text" name="company_name">
+    </div>
+    <div class="form-group">
+      <label>Base Pitch (used for AI personalization)</label>
+      <textarea name="base_pitch" rows="3" placeholder="We help local businesses get more customers through modern websites..."></textarea>
+    </div>
+    <button type="submit" class="btn btn-primary btn-sm">Save signature</button>
+    <span id="sig-status" style="margin-left:12px"></span>
+  </form>
+</div>
+
+<div class="card" style="margin-top:32px">
+  <div class="section-header">
+    <h2>Saved templates</h2>
+  </div>
+  <div id="template-list" hx-get="/api/email/templates" hx-trigger="load" hx-swap="innerHTML">
+    <span class="htmx-indicator">Loading...</span>
+  </div>
+</div>
+{% endblock %}

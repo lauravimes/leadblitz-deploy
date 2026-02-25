@@ -40,3 +40,11 @@ def get_optional_user(request: Request, db: Session) -> Optional[User]:
         return get_current_user(request, db)
     except HTTPException:
         return None
+
+
+def require_admin(request: Request, db: Session) -> User:
+    """Require the current user to be an admin. Raises 403 if not."""
+    user = get_current_user(request, db)
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user

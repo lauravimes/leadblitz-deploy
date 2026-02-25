@@ -4,7 +4,11 @@
 {% block content %}
 <div class="section-header">
   <h1>Leads</h1>
-  <span class="subtext">{{ leads | length }} total</span>
+  <div style="display:flex;gap:8px;align-items:center">
+    <span class="subtext">{{ leads | length }} total</span>
+    <a href="/import" class="btn btn-secondary btn-sm">Import CSV</a>
+    <a href="/api/csv/export" class="btn btn-secondary btn-sm">Export CSV</a>
+  </div>
 </div>
 
 <div class="filter-bar">

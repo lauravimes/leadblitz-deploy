@@ -1,0 +1,47 @@
+{% if message is defined %}
+<div class="card">
+  <p style="font-weight:600;margin-bottom:8px">{{ message }}</p>
+  {% if summary is defined %}
+  <div class="subtext">
+    Total rows: {{ summary.total_rows }} &middot;
+    To score: {{ summary.to_score }} &middot;
+    Skipped: {{ summary.skipped_duplicate + summary.skipped_no_url + summary.skipped_invalid }}
+  </div>
+  {% endif %}
+  {% if import_id %}
+  <div id="progress-poll"
+       hx-get="/api/csv/import/{{ import_id }}/status"
+       hx-trigger="every 3s"
+       hx-target="#progress-poll"
+       hx-swap="outerHTML"
+       style="margin-top:12px">
+    <div class="progress-bar-container">
+      <div class="progress-bar" style="width:0%"></div>
+    </div>
+    <span class="subtext">Scoring in progress...</span>
+  </div>
+  {% endif %}
+</div>
+{% elif status is defined %}
+<div class="card">
+  {% set total = status.total or 1 %}
+  {% set done = status.scored + status.unreachable %}
+  {% set pct = ((done / total) * 100) | int if total > 0 else 0 %}
+  <div class="progress-bar-container">
+    <div class="progress-bar" style="width:{{ pct }}%"></div>
+  </div>
+  <div class="subtext" style="margin-top:8px">
+    {{ status.scored }} scored &middot; {{ status.unreachable }} unreachable &middot; {{ status.pending }} pending
+    {% if status.status == 'completed' %}
+    <span class="saved-flash" style="margin-left:8px">Complete</span>
+    {% endif %}
+  </div>
+  {% if status.status != 'completed' %}
+  <div hx-get="/api/csv/import/{{ import_id }}/status"
+       hx-trigger="every 3s"
+       hx-target="closest .card"
+       hx-swap="outerHTML">
+  </div>
+  {% endif %}
+</div>
+{% endif %}

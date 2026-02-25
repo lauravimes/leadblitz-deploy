@@ -1,0 +1,7 @@
+{% if report_html %}
+<div class="card" style="padding:0;overflow:hidden">
+  <iframe srcdoc="{{ report_html | e }}" style="width:100%;min-height:600px;border:none"></iframe>
+</div>
+{% else %}
+<p class="subtext">No report data.</p>
+{% endif %}

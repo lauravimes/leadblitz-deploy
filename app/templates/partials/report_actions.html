@@ -1,0 +1,23 @@
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+  <button class="btn btn-secondary btn-sm"
+          hx-post="/api/leads/{{ lead.id }}/report/client/html"
+          hx-target="#report-preview"
+          hx-indicator="#report-indicator">Client Report</button>
+  <form method="post" action="/api/leads/{{ lead.id }}/report/pdf" style="display:inline">
+    <input type="hidden" name="report_type" value="client">
+    <button type="submit" class="btn btn-secondary btn-sm">Download PDF</button>
+  </form>
+  <form method="post" action="/api/leads/{{ lead.id }}/report/pdf" style="display:inline">
+    <input type="hidden" name="report_type" value="internal">
+    <button type="submit" class="btn btn-secondary btn-sm">Internal PDF</button>
+  </form>
+  {% if lead.email %}
+  <button class="btn btn-primary btn-sm"
+          hx-post="/api/leads/{{ lead.id }}/report/email"
+          hx-target="#report-status"
+          hx-indicator="#report-indicator">Email Report</button>
+  {% endif %}
+  <span id="report-indicator" class="htmx-indicator">Generating...</span>
+  <span id="report-status"></span>
+</div>
+<div id="report-preview" style="margin-top:16px"></div>

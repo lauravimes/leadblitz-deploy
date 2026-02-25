@@ -192,6 +192,13 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 .costs-table td{padding:8px 12px;border-bottom:1px solid #f3f4f6}
 .costs-table tr:last-child td{border-bottom:none}
 
+/* Hamburger button — hidden on desktop */
+.hamburger{display:none;background:none;border:none;cursor:pointer;padding:4px;flex-direction:column;gap:5px}
+.hamburger span{display:block;width:22px;height:2px;background:var(--text);border-radius:1px;transition:transform .2s,opacity .2s}
+.hamburger.open span:nth-child(1){transform:translateY(7px) rotate(45deg)}
+.hamburger.open span:nth-child(2){opacity:0}
+.hamburger.open span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
+
 /* Responsive */
 @media(max-width:600px){
   .container{padding:0 16px}
@@ -206,5 +213,17 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
   .package-grid{grid-template-columns:1fr}
   .admin-row{flex-direction:column;align-items:stretch}
   .tabs{overflow-x:auto}
-  nav .nav-links{gap:12px;flex-wrap:wrap}
+
+  /* Hamburger mobile nav */
+  .hamburger{display:flex}
+  nav .nav-links{
+    display:none;flex-direction:column;gap:0;
+    position:absolute;top:100%;left:0;right:0;
+    background:var(--card);border-bottom:1px solid var(--border);
+    padding:8px 0;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,.08)
+  }
+  nav .nav-links.open{display:flex}
+  nav .nav-links a{padding:12px 20px;font-size:.93rem}
+  nav .nav-links a:hover,nav .nav-links a.active{background:#f8f8f8}
+  nav .container{position:relative}
 }

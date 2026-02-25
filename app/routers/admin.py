@@ -1,21 +1,26 @@
 import logging
 
-from fastapi import APIRouter, Request, Depends, Form
+from fastapi import APIRouter, Request, Depends, Form, HTTPException
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
-from app.deps import get_db, get_current_user, require_admin
+from app.deps import get_db, get_current_user
 from app.models import User, UserCredits
-from app.services.credits import CreditManager
+from app.services.credits import credit_manager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["admin"])
 
 
+def _check_admin(user: User):
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+
 @router.get("/api/admin/users")
 def list_users(request: Request, db: Session = Depends(get_db)):
     user = get_current_user(request, db)
-    require_admin(user)
+    _check_admin(user)
 
     users = db.query(User).order_by(User.created_at.desc()).all()
     rows = []
@@ -24,7 +29,7 @@ def list_users(request: Request, db: Session = Depends(get_db)):
         rows.append({
             "id": u.id,
             "email": u.email,
-            "name": u.name,
+            "name": u.full_name,
             "is_admin": u.is_admin,
             "created_at": u.created_at,
             "balance": credits.balance if credits else 0,
@@ -45,14 +50,13 @@ def admin_add_credits(
     db: Session = Depends(get_db),
 ):
     user = get_current_user(request, db)
-    require_admin(user)
+    _check_admin(user)
 
     target = db.query(User).filter(User.id == user_id).first()
     if not target:
         return HTMLResponse('<div class="error-msg">User not found</div>')
 
-    cm = CreditManager(db)
-    cm.add(user_id, amount, "admin_grant", f"Admin grant by {user.email}")
+    credit_manager.add_credits(db, user_id, amount, f"Admin grant by {user.email}")
     return HTMLResponse(f'<span class="saved-flash">Added {amount} credits to {target.email}</span>')
 
 
@@ -63,7 +67,7 @@ def toggle_admin(
     db: Session = Depends(get_db),
 ):
     user = get_current_user(request, db)
-    require_admin(user)
+    _check_admin(user)
 
     target = db.query(User).filter(User.id == user_id).first()
     if not target:

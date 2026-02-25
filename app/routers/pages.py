@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Request, Depends
+from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from app.deps import get_db, get_optional_user, get_current_user, require_admin
+from app.deps import get_db, get_optional_user, get_current_user
 from app.models import User, Campaign, Lead
 
 router = APIRouter(tags=["pages"])
@@ -257,7 +257,8 @@ def reset_password_page(request: Request, token: str = ""):
 @router.get("/admin")
 def admin_page(request: Request, db: Session = Depends(get_db)):
     user = get_current_user(request, db)
-    require_admin(user)
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
     return _tpl(request).TemplateResponse(
         "pages/admin.html",
         {"request": request, "user": user, "active_page": "admin"},

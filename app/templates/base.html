@@ -13,11 +13,15 @@
   <nav>
     <div class="container">
       <a href="/dashboard" class="logo">LeadBlitz</a>
-      <div class="nav-links">
+      <button class="hamburger" onclick="this.classList.toggle('open');document.getElementById('nav-menu').classList.toggle('open')" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+      <div class="nav-links" id="nav-menu">
         <a href="/dashboard" class="{{ 'active' if active_page == 'dashboard' }}">Dashboard</a>
         <a href="/search" class="{{ 'active' if active_page == 'search' }}">Search</a>
         <a href="/leads" class="{{ 'active' if active_page == 'leads' }}">Leads</a>
         <a href="/email" class="{{ 'active' if active_page == 'email' }}">Email</a>
+        <a href="/sms" class="{{ 'active' if active_page == 'sms' }}">SMS</a>
         <a href="/credits" class="{{ 'active' if active_page == 'credits' }}">
           Credits <span class="credit-badge" id="nav-credits" hx-get="/api/credits/balance" hx-trigger="load" hx-swap="innerHTML">—</span>
         </a>

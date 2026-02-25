@@ -1,12 +1,12 @@
 [build-system]
-requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.backends._legacy:_Backend"
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "leadblitz-v2"
 version = "2.0.0"
 description = "Lead generation SaaS — Find, Score, Review"
-requires-python = ">=3.11"
+requires-python = ">=3.9"
 dependencies = [
     "fastapi",
     "uvicorn[standard]",
@@ -24,6 +24,9 @@ dependencies = [
     "beautifulsoup4",
     "httpx",
 ]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
 
 [project.optional-dependencies]
 dev = ["ruff", "pytest", "pytest-asyncio"]

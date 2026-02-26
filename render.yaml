@@ -1,16 +1,25 @@
+databases:
+  - name: leadblitz-db
+    plan: free
+    databaseName: leadblitz
+    user: leadblitz
+
 services:
   - type: web
     name: leadblitz
     runtime: python
+    plan: free
     buildCommand: ./build.sh
     startCommand: uvicorn app:create_app --factory --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
         value: "3.11.11"
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: leadblitz-db
+          property: connectionString
       - key: SESSION_SECRET
-        sync: false
+        generateValue: true
       - key: GOOGLE_MAPS_API_KEY
         sync: false
       - key: OPENAI_API_KEY
@@ -22,7 +31,7 @@ services:
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
-        sync: false
+        value: ""
       - key: SMTP_HOST
         value: smtp.gmail.com
       - key: SMTP_PORT

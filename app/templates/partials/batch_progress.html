@@ -18,5 +18,7 @@
        hx-target="closest .card"
        hx-swap="outerHTML">
   </div>
+  {% else %}
+  <script>setTimeout(function(){ window.location.reload(); }, 1500);</script>
   {% endif %}
 </div>

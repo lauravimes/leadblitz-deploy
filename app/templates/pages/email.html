@@ -6,6 +6,81 @@
   <h1>Email outreach</h1>
 </div>
 
+{% if is_bulk and bulk_leads %}
+{# ───── BULK / MAIL-MERGE MODE ───── #}
+{% set leads_with_email = bulk_leads | selectattr('email') | list %}
+{% set leads_no_email   = bulk_leads | rejectattr('email') | list %}
+{% set leads_with_score = bulk_leads | selectattr('score') | list %}
+{% set leads_no_score   = bulk_leads | rejectattr('score') | list %}
+
+<div class="merge-info">
+  <h3>Mail merge: {{ bulk_leads | length }} lead{{ 's' if bulk_leads | length != 1 }}{% if attach_report %} with audit report attached{% endif %}</h3>
+  <div class="merge-stats">
+    <span>{{ leads_with_email | length }} with email</span>
+    {% if leads_no_email %}<span>{{ leads_no_email | length }} missing email (skipped)</span>{% endif %}
+    {% if attach_report %}
+    <span>{{ leads_with_score | length }} with score (report ready)</span>
+    {% if leads_no_score %}<span>{{ leads_no_score | length }} without score (no report)</span>{% endif %}
+    {% endif %}
+  </div>
+  <details>
+    <summary>View all {{ bulk_leads | length }} leads</summary>
+    <div class="merge-lead-list">
+      {% for lead in bulk_leads %}
+      <div class="merge-lead-item">
+        <span style="flex:1;font-weight:500">{{ lead.name }}</span>
+        <span>{{ lead.email or 'No email' }}</span>
+        {% if attach_report %}
+        <span>{{ 'Score: ' ~ lead.score if lead.score is not none else 'No score' }}</span>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </details>
+</div>
+
+<div class="card">
+  <h2>Compose</h2>
+  <form id="email-form" style="margin-top:16px">
+    {% if attach_report %}
+    <input type="hidden" name="attach_report" value="1">
+    {% endif %}
+    <input type="hidden" name="lead_ids" id="email-lead-ids"
+           value="{{ bulk_leads | map(attribute='id') | join(',') }}">
+    <div class="form-group">
+      <label>Subject (use {{business_name}} and {{website}} as variables)</label>
+      <input type="text" name="subject" id="email-subject"
+             value="Website Audit Report — {% raw %}{{business_name}}{% endraw %}">
+    </div>
+    <div class="form-group">
+      <label>Body (HTML supported, variables will be replaced per lead)</label>
+      <textarea name="body" id="email-body" rows="8">Hi,
+
+I took a look at your website and put together a quick audit report with some findings that I think you'll find useful.
+
+I've attached the full report as a PDF — it covers page speed, mobile-friendliness, SEO, and security.
+
+Happy to chat if you'd like to discuss any of it.
+
+Best regards</textarea>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button type="button" class="btn btn-secondary btn-sm"
+              hx-post="/api/email/preview"
+              hx-include="#email-form"
+              hx-target="#email-preview">Preview</button>
+      <button type="button" class="btn btn-primary btn-sm"
+              hx-post="/api/email/send"
+              hx-include="#email-form"
+              hx-target="#email-status"
+              hx-confirm="Send mail merge to {{ leads_with_email | length }} lead{{ 's' if leads_with_email | length != 1 }}?">Send</button>
+    </div>
+    <div id="email-status" style="margin-top:12px"></div>
+  </form>
+</div>
+
+{% else %}
+{# ───── SINGLE / EMPTY COMPOSE MODE ───── #}
 <div class="card">
   <h2>Compose</h2>
   {% if attach_report and prefill_lead %}
@@ -82,6 +157,7 @@ Best regards{% endif %}</textarea>
     <span id="email-status" style="margin-left:12px"></span>
   </form>
 </div>
+{% endif %}
 
 <div id="email-preview" style="margin-top:16px"></div>
 

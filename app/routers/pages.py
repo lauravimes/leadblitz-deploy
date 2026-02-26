@@ -149,9 +149,38 @@ def email_page(
     request: Request,
     lead_id: str = None,
     attach_report: str = None,
+    bulk_token: str = None,
     db: Session = Depends(get_db),
 ):
     user = get_current_user(request, db)
+
+    # --- Bulk / mail-merge mode ---
+    if bulk_token:
+        from app.routers.leads import _bulk_selections
+
+        selection = _bulk_selections.pop(bulk_token, None)
+        if not selection or selection["user_id"] != user.id:
+            return RedirectResponse("/leads", status_code=302)
+
+        bulk_leads = (
+            db.query(Lead)
+            .filter(Lead.id.in_(selection["lead_ids"]), Lead.user_id == user.id)
+            .all()
+        )
+        return _tpl(request).TemplateResponse(
+            "pages/email.html",
+            {
+                "request": request,
+                "user": user,
+                "active_page": "email",
+                "prefill_lead": None,
+                "attach_report": selection["attach_report"],
+                "is_bulk": True,
+                "bulk_leads": bulk_leads,
+            },
+        )
+
+    # --- Single lead or empty compose ---
     prefill_lead = None
     if lead_id:
         prefill_lead = db.query(Lead).filter(Lead.id == lead_id, Lead.user_id == user.id).first()
@@ -163,6 +192,8 @@ def email_page(
             "active_page": "email",
             "prefill_lead": prefill_lead,
             "attach_report": attach_report == "1" and prefill_lead is not None,
+            "is_bulk": False,
+            "bulk_leads": [],
         },
     )
 

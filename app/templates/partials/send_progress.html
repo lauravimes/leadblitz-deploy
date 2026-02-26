@@ -1,0 +1,29 @@
+{% set total = status.total or 1 %}
+{% set done = status.sent + status.failed + status.skipped %}
+{% set pct = ((done / total) * 100) | int if total > 0 else 0 %}
+
+<div class="card card-compact">
+  <div class="progress-bar-container">
+    <div class="progress-bar" style="width:{{ pct }}%"></div>
+  </div>
+  <div class="subtext" style="margin-top:8px">
+    {{ status.sent }} sent &middot; {{ status.failed }} failed &middot; {{ status.skipped }} skipped &middot; {{ total - done }} remaining
+    {% if status.status == 'completed' %}
+    <span class="saved-flash" style="margin-left:8px">Complete</span>
+    {% endif %}
+  </div>
+  {% if status.errors %}
+  <div style="margin-top:8px;font-size:.82rem;color:var(--red)">
+    {% for err in status.errors %}
+    <div>{{ err }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if status.status != 'completed' %}
+  <div hx-get="/api/email/send/{{ send_id }}/status"
+       hx-trigger="every 3s"
+       hx-target="closest .card"
+       hx-swap="outerHTML">
+  </div>
+  {% endif %}
+</div>

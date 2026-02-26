@@ -17,6 +17,9 @@
 </div>
 
 <div class="filter-bar">
+  <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:.87rem;color:var(--muted)">
+    <input type="checkbox" id="select-all" onchange="toggleSelectAll(this.checked)"> Select all
+  </label>
   <select onchange="window.location.href='/leads?stage=' + this.value">
     <option value="" {{ 'selected' if not stage_filter }}>All stages</option>
     <option value="new" {{ 'selected' if stage_filter == 'new' }}>New</option>
@@ -34,6 +37,18 @@
   {% endif %}
 </div>
 
+<div id="bulk-bar" class="bulk-bar" style="display:none">
+  <div class="bulk-bar-inner">
+    <span id="bulk-count" style="font-weight:600">0 selected</span>
+    <span id="bulk-warnings" class="subtext"></span>
+    <form id="bulk-email-form" hx-post="/api/leads/bulk-email" hx-swap="none">
+      <input type="hidden" name="lead_ids" id="bulk-lead-ids">
+      <input type="hidden" name="attach_report" value="1">
+      <button type="submit" class="btn btn-primary btn-sm">Email with Report</button>
+    </form>
+  </div>
+</div>
+
 <div id="batch-progress"></div>
 
 <div class="card" style="padding:0">
@@ -47,4 +62,53 @@
     {% endif %}
   </div>
 </div>
+
+<script>
+function updateBulkBar() {
+  var checks = document.querySelectorAll('.lead-select:checked');
+  var bar = document.getElementById('bulk-bar');
+  var count = document.getElementById('bulk-count');
+  var warnings = document.getElementById('bulk-warnings');
+  var ids = document.getElementById('bulk-lead-ids');
+
+  if (checks.length === 0) {
+    bar.style.display = 'none';
+    document.getElementById('select-all').checked = false;
+    return;
+  }
+  bar.style.display = '';
+
+  var noEmail = 0, noScore = 0;
+  var idList = [];
+  checks.forEach(function(cb) {
+    idList.push(cb.value);
+    if (cb.dataset.hasEmail === '0') noEmail++;
+    if (cb.dataset.hasScore === '0') noScore++;
+  });
+
+  count.textContent = checks.length + ' selected';
+  ids.value = idList.join(',');
+
+  var parts = [];
+  if (noEmail > 0) parts.push(noEmail + ' without email');
+  if (noScore > 0) parts.push(noScore + ' without score');
+  warnings.textContent = parts.length ? '(' + parts.join(', ') + ')' : '';
+
+  var all = document.querySelectorAll('.lead-select');
+  document.getElementById('select-all').checked = (checks.length === all.length);
+}
+
+function toggleSelectAll(checked) {
+  document.querySelectorAll('.lead-select').forEach(function(cb) { cb.checked = checked; });
+  updateBulkBar();
+}
+
+document.body.addEventListener('htmx:afterRequest', function(e) {
+  if (e.detail.elt && e.detail.elt.id === 'bulk-email-form') {
+    var xhr = e.detail.xhr;
+    var redirect = xhr.getResponseHeader('HX-Redirect');
+    if (redirect) window.location.href = redirect;
+  }
+});
+</script>
 {% endblock %}

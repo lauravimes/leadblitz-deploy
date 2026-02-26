@@ -1,11 +1,18 @@
+import uuid as _uuid
+
 from fastapi import APIRouter, Request, Depends, Form
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from sqlalchemy.orm import Session
 
 from app.deps import get_db, get_current_user
 from app.models import Lead
 
 router = APIRouter(tags=["leads"])
+
+# Short-lived server-side storage for bulk lead selections.
+# Keyed by 12-char token → {"user_id": int, "lead_ids": list[str], "attach_report": bool}
+_bulk_selections: dict[str, dict] = {}
+_BULK_SELECTIONS_MAX = 100
 
 
 @router.patch("/leads/{lead_id}/stage")
@@ -77,7 +84,36 @@ def delete_lead(
         db.commit()
 
     # HX-Redirect back to leads list
-    from fastapi.responses import Response
     response = Response(status_code=200)
     response.headers["HX-Redirect"] = "/leads"
+    return response
+
+
+@router.post("/leads/bulk-email")
+def bulk_email_redirect(
+    request: Request,
+    lead_ids: str = Form(""),
+    attach_report: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    user = get_current_user(request, db)
+
+    ids = [lid.strip() for lid in lead_ids.split(",") if lid.strip()]
+    if not ids:
+        return HTMLResponse('<div class="error-msg">No leads selected</div>')
+
+    # Evict oldest entries if cache is full
+    while len(_bulk_selections) >= _BULK_SELECTIONS_MAX:
+        oldest_key = next(iter(_bulk_selections))
+        _bulk_selections.pop(oldest_key, None)
+
+    token = str(_uuid.uuid4()).replace("-", "")[:12]
+    _bulk_selections[token] = {
+        "user_id": user.id,
+        "lead_ids": ids,
+        "attach_report": attach_report == "1",
+    }
+
+    response = Response(status_code=200)
+    response.headers["HX-Redirect"] = f"/email?bulk_token={token}"
     return response

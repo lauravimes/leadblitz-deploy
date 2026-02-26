@@ -6,6 +6,11 @@
   <h1>Leads</h1>
   <div style="display:flex;gap:8px;align-items:center">
     <span class="subtext">{{ leads | length }} total</span>
+    <button class="btn btn-primary btn-sm"
+            hx-post="/api/score/batch"
+            {% if campaign_filter %}hx-vals='{"campaign_id":"{{ campaign_filter }}"}'{% endif %}
+            hx-target="#batch-progress"
+            hx-swap="innerHTML">Score all unscored</button>
     <a href="/import" class="btn btn-secondary btn-sm">Import CSV</a>
     <a href="/api/csv/export" class="btn btn-secondary btn-sm">Export CSV</a>
   </div>
@@ -28,6 +33,8 @@
   </select>
   {% endif %}
 </div>
+
+<div id="batch-progress"></div>
 
 <div class="card" style="padding:0">
   <div id="lead-list">

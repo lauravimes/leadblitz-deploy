@@ -12,10 +12,7 @@
     <button type="submit" class="btn btn-secondary btn-sm">Internal PDF</button>
   </form>
   {% if lead.email %}
-  <button class="btn btn-primary btn-sm"
-          hx-post="/api/leads/{{ lead.id }}/report/email"
-          hx-target="#report-status"
-          hx-indicator="#report-indicator">Email Report</button>
+  <a href="/email?lead_id={{ lead.id }}&attach_report=1" class="btn btn-primary btn-sm">Email Report</a>
   {% endif %}
   <span id="report-indicator" class="htmx-indicator">Generating...</span>
   <span id="report-status"></span>

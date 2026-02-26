@@ -145,11 +145,25 @@ def lead_detail_page(lead_id: str, request: Request, db: Session = Depends(get_d
 
 
 @router.get("/email")
-def email_page(request: Request, db: Session = Depends(get_db)):
+def email_page(
+    request: Request,
+    lead_id: str = None,
+    attach_report: str = None,
+    db: Session = Depends(get_db),
+):
     user = get_current_user(request, db)
+    prefill_lead = None
+    if lead_id:
+        prefill_lead = db.query(Lead).filter(Lead.id == lead_id, Lead.user_id == user.id).first()
     return _tpl(request).TemplateResponse(
         "pages/email.html",
-        {"request": request, "user": user, "active_page": "email"},
+        {
+            "request": request,
+            "user": user,
+            "active_page": "email",
+            "prefill_lead": prefill_lead,
+            "attach_report": attach_report == "1" and prefill_lead is not None,
+        },
     )
 
 

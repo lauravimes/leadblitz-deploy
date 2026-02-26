@@ -44,6 +44,7 @@ def send_emails(
     subject: str = Form(...),
     body: str = Form(...),
     lead_ids: str = Form(""),
+    attach_report: str = Form(""),
     db: Session = Depends(get_db),
 ):
     user = get_current_user(request, db)
@@ -65,13 +66,39 @@ def send_emails(
         rendered_subject = subject.replace("{{business_name}}", lead.name or "")
         rendered_body = body.replace("{{business_name}}", lead.name or "").replace("{{website}}", lead.website or "")
         try:
-            send_email_for_user(db, user.id, lead.email, rendered_subject, rendered_body)
+            if attach_report == "1" and lead.score is not None:
+                from app.services.client_report import generate_client_report
+                from app.services.pdf_report import generate_client_pdf
+                from app.services.email_senders import send_email_with_attachment_for_user
+                lead_data = {
+                    "name": lead.name, "website": lead.website,
+                    "score": lead.score or 0, "email": lead.email or "",
+                    "phone": lead.phone or "", "address": lead.address or "",
+                    "heuristic_score": lead.heuristic_score or 0,
+                    "ai_score": lead.ai_score or 0,
+                    "score_breakdown": lead.score_breakdown,
+                    "technographics": lead.technographics,
+                }
+                report = generate_client_report(lead_data)
+                pdf_bytes = generate_client_pdf(report)
+                filename = f"audit-report-{(lead.name or 'report').replace(' ', '-').lower()}.pdf"
+                send_email_with_attachment_for_user(
+                    db, user.id, lead.email, rendered_subject, rendered_body,
+                    attachment_bytes=pdf_bytes, attachment_filename=filename,
+                )
+            else:
+                send_email_for_user(db, user.id, lead.email, rendered_subject, rendered_body)
             credit_manager.deduct_credits(db, user.id, "email_send", 1, f"Email to {lead.email}")
             sent += 1
         except EmailProviderError as e:
             errors.append(f"{lead.name}: {e}")
+        except Exception as e:
+            logger.error(f"Email send error for {lead.name}: {e}")
+            errors.append(f"{lead.name}: {e}")
 
     msg = f"Sent {sent} email{'s' if sent != 1 else ''}"
+    if attach_report == "1":
+        msg += " with report attached"
     if errors:
         msg += f". {len(errors)} failed."
     return HTMLResponse(f'<span class="saved-flash">{msg}</span>')

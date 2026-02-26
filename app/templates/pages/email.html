@@ -8,20 +8,67 @@
 
 <div class="card">
   <h2>Compose</h2>
+  {% if attach_report and prefill_lead %}
+  <div style="margin-top:12px;padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:14px">
+    Audit report for <strong>{{ prefill_lead.name }}</strong> will be attached as PDF
+  </div>
+  {% endif %}
   <form id="email-form" style="margin-top:16px">
+    {% if attach_report and prefill_lead %}
+    <input type="hidden" name="attach_report" value="1">
+    {% endif %}
     <div class="form-group">
       <label>Subject</label>
-      <input type="text" name="subject" id="email-subject" placeholder="Hi {{business_name}} — quick question" value="">
+      <input type="text" name="subject" id="email-subject"
+             placeholder="Hi {{business_name}} — quick question"
+             value="{% if prefill_lead %}Website Audit Report — {{ prefill_lead.name }}{% endif %}">
     </div>
     <div class="form-group">
       <label>Body (HTML supported, use {{business_name}} and {{website}} as variables)</label>
-      <textarea name="body" id="email-body" rows="8" placeholder="Write your email..."></textarea>
+      <textarea name="body" id="email-body" rows="8" placeholder="Write your email...">{% if prefill_lead %}Hi,
+
+I took a look at your website and put together a quick audit report with some findings that I think you'll find useful.
+
+I've attached the full report as a PDF — it covers page speed, mobile-friendliness, SEO, and security.
+
+Happy to chat if you'd like to discuss any of it.
+
+Best regards{% endif %}</textarea>
     </div>
     <div class="form-group">
       <label>Lead IDs (comma separated)</label>
-      <input type="text" name="lead_ids" id="email-lead-ids" placeholder="Select leads from the Leads page">
+      <input type="text" name="lead_ids" id="email-lead-ids"
+             placeholder="Select leads from the Leads page"
+             value="{% if prefill_lead %}{{ prefill_lead.id }}{% endif %}">
     </div>
-    <div style="display:flex;gap:8px">
+    {% if prefill_lead %}
+    <div style="display:flex;gap:8px;align-items:center">
+      <button type="button" class="btn btn-secondary btn-sm"
+              hx-post="/api/email/personalize"
+              hx-vals='{"lead_id":"{{ prefill_lead.id }}"}'
+              hx-target="#ai-fill-status"
+              hx-indicator="#ai-fill-status"
+              onclick="this.disabled=true;this.textContent='Generating...'">AI-write email</button>
+      <span id="ai-fill-status" class="subtext"></span>
+    </div>
+    <script>
+    document.body.addEventListener('htmx:afterRequest', function(e){
+      if(e.detail.pathInfo && e.detail.pathInfo.requestPath==='/api/email/personalize'){
+        var btn=document.querySelector('[hx-post="/api/email/personalize"]');
+        if(btn){btn.disabled=false;btn.textContent='AI-write email';}
+        try{
+          var d=JSON.parse(e.detail.xhr.responseText);
+          if(d.subject)document.getElementById('email-subject').value=d.subject;
+          if(d.body)document.getElementById('email-body').value=d.body;
+          document.getElementById('ai-fill-status').innerHTML='<span class="saved-flash">Done</span>';
+        }catch(err){
+          document.getElementById('ai-fill-status').innerHTML='<span class="error-msg">Failed</span>';
+        }
+      }
+    });
+    </script>
+    {% endif %}
+    <div style="display:flex;gap:8px;margin-top:12px">
       <button type="button" class="btn btn-secondary btn-sm"
               hx-post="/api/email/preview"
               hx-include="#email-form"
@@ -30,7 +77,7 @@
               hx-post="/api/email/send"
               hx-include="#email-form"
               hx-target="#email-status"
-              hx-confirm="Send emails to selected leads?">Send</button>
+              hx-confirm="Send email to selected leads?">Send</button>
     </div>
     <span id="email-status" style="margin-left:12px"></span>
   </form>

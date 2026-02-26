@@ -179,14 +179,3 @@ def me(request: Request, db: Session = Depends(get_db)):
         "full_name": user.full_name,
         "is_admin": user.is_admin,
     })
-
-
-# --- Temporary admin promotion (remove after use) ---
-@router.get("/setup-admin-9x7k2m")
-def setup_admin(db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == "shaca147@gmail.com").first()
-    if not user:
-        return JSONResponse({"error": "user not found"})
-    user.is_admin = True
-    db.commit()
-    return JSONResponse({"ok": True, "email": user.email, "is_admin": True})

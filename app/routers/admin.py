@@ -1,11 +1,12 @@
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Request, Depends, Form, HTTPException
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from app.deps import get_db, get_current_user
-from app.models import User, UserCredits, CreditTransaction
+from app.models import User, UserCredits, CreditTransaction, Lead
 from app.services.credits import credit_manager
 
 logger = logging.getLogger(__name__)
@@ -120,3 +121,30 @@ def toggle_admin(
 
     status = "admin" if target.is_admin else "regular user"
     return HTMLResponse(f'<span class="saved-flash">{target.email} is now {status}</span>')
+
+
+@router.post("/api/admin/backfill-emailed")
+def backfill_emailed(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Mark all leads that have an email but no last_emailed_at as emailed once."""
+    user = get_current_user(request, db)
+    _check_admin(user)
+
+    leads = db.query(Lead).filter(
+        Lead.email.isnot(None),
+        Lead.email != "",
+        Lead.last_emailed_at.is_(None),
+        Lead.emails_sent_count <= 0,
+    ).all()
+
+    now = datetime.now(timezone.utc)
+    count = 0
+    for lead in leads:
+        lead.last_emailed_at = now
+        lead.emails_sent_count = 1
+        count += 1
+    db.commit()
+
+    return HTMLResponse(f'<span class="saved-flash">Backfilled {count} leads as emailed</span>')

@@ -30,9 +30,9 @@ def dashboard_stats(request: Request, db: Session = Depends(get_db)):
     total_campaigns = db.query(func.count(Campaign.id)).filter(Campaign.user_id == uid).scalar() or 0
 
     emails_sent = (
-        db.query(func.count(CreditTransaction.id))
-        .filter(CreditTransaction.user_id == uid, CreditTransaction.description.like("%email%"))
-        .scalar() or 0
+        db.query(func.coalesce(func.sum(Lead.emails_sent_count), 0))
+        .filter(Lead.user_id == uid)
+        .scalar()
     )
 
     sms_sent = (

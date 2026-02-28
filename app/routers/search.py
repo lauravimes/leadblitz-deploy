@@ -63,20 +63,24 @@ def search(
     campaign.next_page_token = result.get("next_page_token")
     db.commit()
 
-    # Create leads (skip duplicates by website within campaign)
-    existing_websites = {
-        l.website
-        for l in db.query(Lead.website).filter(Lead.campaign_id == campaign.id).all()
-        if l.website
-    }
+    # Create leads (skip duplicates by google_place_id or website within campaign)
+    existing = db.query(Lead.google_place_id, Lead.website).filter(
+        Lead.campaign_id == campaign.id
+    ).all()
+    existing_place_ids = {l.google_place_id for l in existing if l.google_place_id}
+    existing_websites = {l.website for l in existing if l.website}
 
     leads = []
     for place in result["places"]:
+        pid = place.get("place_id")
+        if pid and pid in existing_place_ids:
+            continue
         if place.get("website") and place["website"] in existing_websites:
             continue
         lead = Lead(
             user_id=user.id,
             campaign_id=campaign.id,
+            google_place_id=pid,
             name=place.get("name", ""),
             address=place.get("address", ""),
             phone=place.get("phone", ""),
@@ -137,19 +141,23 @@ def search_more(
     campaign.next_page_token = result.get("next_page_token")
     db.commit()
 
-    existing_websites = {
-        l.website
-        for l in db.query(Lead.website).filter(Lead.campaign_id == campaign.id).all()
-        if l.website
-    }
+    existing = db.query(Lead.google_place_id, Lead.website).filter(
+        Lead.campaign_id == campaign.id
+    ).all()
+    existing_place_ids = {l.google_place_id for l in existing if l.google_place_id}
+    existing_websites = {l.website for l in existing if l.website}
 
     leads = []
     for place in result["places"]:
+        pid = place.get("place_id")
+        if pid and pid in existing_place_ids:
+            continue
         if place.get("website") and place["website"] in existing_websites:
             continue
         lead = Lead(
             user_id=user.id,
             campaign_id=campaign.id,
+            google_place_id=pid,
             name=place.get("name", ""),
             address=place.get("address", ""),
             phone=place.get("phone", ""),

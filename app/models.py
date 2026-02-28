@@ -61,6 +61,8 @@ class Lead(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     campaign_id = Column(String(36), ForeignKey("campaigns.id", ondelete="CASCADE"), nullable=True, index=True)
 
+    google_place_id = Column(String(255), nullable=True, index=True)
+
     name = Column(String(500), nullable=False, default="")
     address = Column(Text, default="")
     phone = Column(String(50), default="")

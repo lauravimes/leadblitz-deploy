@@ -91,6 +91,7 @@ def _get_details(place_id: str, api_key: str) -> Optional[Dict]:
             return None
         r = data.get("result", {})
         return {
+            "place_id": place_id,
             "name": r.get("name", ""),
             "address": r.get("formatted_address", ""),
             "phone": r.get("formatted_phone_number") or r.get("international_phone_number", ""),

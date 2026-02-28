@@ -123,6 +123,25 @@ def toggle_admin(
     return HTMLResponse(f'<span class="saved-flash">{target.email} is now {status}</span>')
 
 
+@router.get("/api/admin/diag-leads")
+def diag_leads(db: Session = Depends(get_db)):
+    """Temporary diagnostic endpoint — remove after use."""
+    from fastapi.responses import JSONResponse
+    total = db.query(Lead).count()
+    with_email = db.query(Lead).filter(Lead.email.isnot(None), Lead.email != "").count()
+    null_email = db.query(Lead).filter(Lead.email.is_(None)).count()
+    with_emailed_at = db.query(Lead).filter(Lead.last_emailed_at.isnot(None)).count()
+    sample = db.query(Lead.id, Lead.name, Lead.email, Lead.last_emailed_at, Lead.emails_sent_count).limit(15).all()
+    return JSONResponse({
+        "total": total, "with_email": with_email, "null_email": null_email,
+        "with_emailed_at": with_emailed_at,
+        "sample": [
+            {"name": s.name, "email": s.email, "emailed_at": str(s.last_emailed_at), "count": s.emails_sent_count}
+            for s in sample
+        ],
+    })
+
+
 @router.post("/api/admin/backfill-emailed")
 def backfill_emailed(
     request: Request,

@@ -85,6 +85,10 @@ class Lead(Base):
     last_scored_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=_utcnow)
 
+    # Email outreach tracking
+    last_emailed_at = Column(DateTime(timezone=True), nullable=True)
+    emails_sent_count = Column(Integer, default=0, server_default="0")
+
     # Import tracking
     source = Column(String(50), default="search")  # search / import
     import_id = Column(String(36), ForeignKey("csv_imports.id", ondelete="SET NULL"), nullable=True)

@@ -13,6 +13,9 @@
   </div>
   <div class="lead-actions">
     <span class="stage stage-{{ lead.stage }}">{{ lead.stage }}</span>
+    {% if lead.last_emailed_at %}
+      <span class="emailed-badge">Emailed{% if lead.emails_sent_count > 1 %} ×{{ lead.emails_sent_count }}{% endif %}</span>
+    {% endif %}
     {% if lead.score is not none %}
       <span class="score {{ 'score-high' if lead.score >= 70 else ('score-mid' if lead.score >= 40 else 'score-low') }}">{{ lead.score }}</span>
     {% elif lead.website %}

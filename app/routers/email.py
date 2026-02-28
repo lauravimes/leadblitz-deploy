@@ -1,6 +1,7 @@
 import logging
 import threading
 import uuid as _uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Request, Depends, Form
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -95,6 +96,9 @@ def _batch_send_worker(
                     )
                 else:
                     send_email_for_user(db, user_id, lead.email, rendered_subject, rendered_body)
+                lead.last_emailed_at = datetime.now(timezone.utc)
+                lead.emails_sent_count = (lead.emails_sent_count or 0) + 1
+                db.commit()
                 status["sent"] += 1
             except Exception as e:
                 logger.error(f"Batch email error for {lead.name}: {e}")
@@ -183,6 +187,9 @@ def send_emails(
             else:
                 send_email_for_user(db, user.id, lead.email, rendered_subject, rendered_body)
             credit_manager.deduct_credits(db, user.id, "email_send", 1, f"Email to {lead.email}")
+            lead.last_emailed_at = datetime.now(timezone.utc)
+            lead.emails_sent_count = (lead.emails_sent_count or 0) + 1
+            db.commit()
             sent += 1
         except EmailProviderError as e:
             errors.append(f"{lead.name}: {e}")
@@ -229,6 +236,9 @@ def send_single_email(
     try:
         send_email_for_user(db, user.id, lead.email, subject, body)
         credit_manager.deduct_credits(db, user.id, "email_send", 1, f"Email to {lead.email}")
+        lead.last_emailed_at = datetime.now(timezone.utc)
+        lead.emails_sent_count = (lead.emails_sent_count or 0) + 1
+        db.commit()
         return HTMLResponse('<span class="saved-flash">Email sent</span>')
     except EmailProviderError as e:
         return HTMLResponse(f'<div class="error-msg">{e}</div>')

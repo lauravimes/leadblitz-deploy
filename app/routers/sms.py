@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Request, Depends, Form
 from fastapi.responses import HTMLResponse
@@ -82,6 +83,8 @@ def send_sms_bulk(
 
         if result["success"]:
             credit_manager.deduct_credits(db, user.id, "sms_send", 1, f"SMS to {lead.phone}")
+            lead.last_sms_at = datetime.now(timezone.utc)
+            lead.sms_sent_count = (lead.sms_sent_count or 0) + 1
             sent += 1
         else:
             errors.append(f"{lead.name}: {result.get('error', 'Unknown error')}")

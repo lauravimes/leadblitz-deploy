@@ -3,14 +3,18 @@ import threading
 import uuid as _uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Request, Depends, Form
+from fastapi import APIRouter, Request, Depends, File, Form, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy.orm import Session
 
 from app.deps import get_db, get_current_user
 from app.models import User, Lead, EmailSignature, EmailTemplate
 from app.services.credits import credit_manager
-from app.services.email_senders import send_email_for_user, EmailProviderError
+from app.services.email_senders import (
+    send_email_for_user,
+    send_email_with_attachments_for_user,
+    EmailProviderError,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["email"])
@@ -47,10 +51,10 @@ def preview_emails(
 def _batch_send_worker(
     lead_ids: list[str], user_id: int, send_id: str,
     subject: str, body: str, attach_report: bool,
+    custom_attachment: tuple[bytes, str, str] | None = None,
 ):
-    """Background thread that sends emails one by one (with optional PDF)."""
+    """Background thread that sends emails one by one (with optional PDF and/or custom file)."""
     from app.database import SessionLocal
-    from app.services.email_senders import send_email_with_attachment_for_user
 
     db = SessionLocal()
     status = _send_status[send_id]
@@ -74,6 +78,9 @@ def _batch_send_worker(
                 return
 
             try:
+                attachments: list[tuple[bytes, str, str]] = []
+                if custom_attachment:
+                    attachments.append(custom_attachment)
                 if attach_report and lead.score is not None:
                     from app.services.client_report import generate_client_report
                     from app.services.pdf_report import generate_client_pdf
@@ -90,9 +97,12 @@ def _batch_send_worker(
                     report = generate_client_report(lead_data)
                     pdf_bytes = generate_client_pdf(report)
                     filename = f"audit-report-{(lead.name or 'report').replace(' ', '-').lower()}.pdf"
-                    send_email_with_attachment_for_user(
+                    attachments.append((pdf_bytes, filename, "application/pdf"))
+
+                if attachments:
+                    send_email_with_attachments_for_user(
                         db, user_id, lead.email, rendered_subject, rendered_body,
-                        attachment_bytes=pdf_bytes, attachment_filename=filename,
+                        attachments=attachments,
                     )
                 else:
                     send_email_for_user(db, user_id, lead.email, rendered_subject, rendered_body)
@@ -109,13 +119,17 @@ def _batch_send_worker(
         status["status"] = "completed"
 
 
+_MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024  # 10 MB
+
+
 @router.post("/api/email/send")
-def send_emails(
+async def send_emails(
     request: Request,
     subject: str = Form(...),
     body: str = Form(...),
     lead_ids: str = Form(""),
     attach_report: str = Form(""),
+    attachment: UploadFile = File(None),
     db: Session = Depends(get_db),
 ):
     templates = request.app.state.templates
@@ -132,10 +146,18 @@ def send_emails(
     if not has:
         return HTMLResponse(f'<div class="error-msg">Insufficient credits. Need {cost}, have {balance}</div>')
 
+    # Read custom attachment (UploadFile is not thread-safe, read now)
+    custom_attachment: tuple[bytes, str, str] | None = None
+    if attachment and attachment.filename:
+        file_bytes = await attachment.read()
+        if len(file_bytes) > _MAX_ATTACHMENT_SIZE:
+            return HTMLResponse('<div class="error-msg">Attachment too large (max 10 MB)</div>')
+        custom_attachment = (file_bytes, attachment.filename, attachment.content_type or "application/octet-stream")
+
     use_report = attach_report == "1"
 
-    # For large batches with report (PDF gen is slow), use background thread
-    if len(leads_with_email) > 3 and use_report:
+    # For large batches, use background thread
+    if len(leads_with_email) > 3:
         send_id = str(_uuid.uuid4())[:8]
         _send_status[send_id] = {
             "status": "in_progress",
@@ -147,7 +169,8 @@ def send_emails(
         }
         thread = threading.Thread(
             target=_batch_send_worker,
-            args=([l.id for l in leads], user.id, send_id, subject, body, True),
+            args=([l.id for l in leads], user.id, send_id, subject, body, use_report),
+            kwargs={"custom_attachment": custom_attachment},
             daemon=True,
         )
         thread.start()
@@ -164,10 +187,12 @@ def send_emails(
         rendered_subject = subject.replace("{{business_name}}", lead.name or "")
         rendered_body = body.replace("{{business_name}}", lead.name or "").replace("{{website}}", lead.website or "")
         try:
+            attachments: list[tuple[bytes, str, str]] = []
+            if custom_attachment:
+                attachments.append(custom_attachment)
             if use_report and lead.score is not None:
                 from app.services.client_report import generate_client_report
                 from app.services.pdf_report import generate_client_pdf
-                from app.services.email_senders import send_email_with_attachment_for_user
                 lead_data = {
                     "name": lead.name, "website": lead.website,
                     "score": lead.score or 0, "email": lead.email or "",
@@ -180,9 +205,12 @@ def send_emails(
                 report = generate_client_report(lead_data)
                 pdf_bytes = generate_client_pdf(report)
                 filename = f"audit-report-{(lead.name or 'report').replace(' ', '-').lower()}.pdf"
-                send_email_with_attachment_for_user(
+                attachments.append((pdf_bytes, filename, "application/pdf"))
+
+            if attachments:
+                send_email_with_attachments_for_user(
                     db, user.id, lead.email, rendered_subject, rendered_body,
-                    attachment_bytes=pdf_bytes, attachment_filename=filename,
+                    attachments=attachments,
                 )
             else:
                 send_email_for_user(db, user.id, lead.email, rendered_subject, rendered_body)
@@ -198,8 +226,8 @@ def send_emails(
             errors.append(f"{lead.name}: {e}")
 
     msg = f"Sent {sent} email{'s' if sent != 1 else ''}"
-    if use_report:
-        msg += " with report attached"
+    if use_report or custom_attachment:
+        msg += " with attachment"
     if errors:
         msg += f". {len(errors)} failed."
     return HTMLResponse(f'<span class="saved-flash">{msg}</span>')

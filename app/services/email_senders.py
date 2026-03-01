@@ -192,24 +192,33 @@ def send_email_for_user(db: Session, user_id: int, to_email: str, subject: str, 
 
 def _build_mime_with_attachment(
     from_email: str, to_email: str, subject: str, html_body: str,
-    attachment_bytes: bytes, attachment_filename: str, attachment_mime: str = "application/pdf",
+    attachments: list[tuple[bytes, str, str]],
 ) -> MIMEMultipart:
+    """Build a MIME message with one or more attachments.
+
+    Each attachment is a (bytes, filename, mime_type) tuple.
+    """
     message = MIMEMultipart("mixed")
     message["From"] = from_email
     message["To"] = to_email
     message["Subject"] = subject
     message.attach(MIMEText(html_body, "html"))
-    maintype, subtype = attachment_mime.split("/", 1)
-    attachment = MIMEApplication(attachment_bytes, _subtype=subtype)
-    attachment.add_header("Content-Disposition", "attachment", filename=attachment_filename)
-    message.attach(attachment)
+    for att_bytes, att_filename, att_mime in attachments:
+        _maintype, subtype = att_mime.split("/", 1)
+        part = MIMEApplication(att_bytes, _subtype=subtype)
+        part.add_header("Content-Disposition", "attachment", filename=att_filename)
+        message.attach(part)
     return message
 
 
-def send_email_with_attachment_for_user(
+def send_email_with_attachments_for_user(
     db: Session, user_id: int, to_email: str, subject: str, html_body: str,
-    attachment_bytes: bytes, attachment_filename: str, attachment_mime: str = "application/pdf",
+    attachments: list[tuple[bytes, str, str]],
 ) -> dict:
+    """Send an email with one or more attachments.
+
+    Each entry in *attachments* is a (bytes, filename, mime_type) tuple.
+    """
     settings = get_email_settings(db, user_id)
     if not settings or settings.provider == "none":
         raise EmailProviderError("No email provider configured.")
@@ -220,8 +229,7 @@ def send_email_with_attachment_for_user(
         else:
             access_token = decrypt(settings.gmail_access_token)
         message = _build_mime_with_attachment(
-            settings.gmail_email_address, to_email, subject, html_body,
-            attachment_bytes, attachment_filename, attachment_mime)
+            settings.gmail_email_address, to_email, subject, html_body, attachments)
         raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
         resp = requests.post(
             "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
@@ -236,6 +244,15 @@ def send_email_with_attachment_for_user(
             access_token = refresh_outlook_token(settings, db)
         else:
             access_token = decrypt(settings.outlook_access_token)
+        outlook_attachments = [
+            {
+                "@odata.type": "#microsoft.graph.fileAttachment",
+                "name": att_filename,
+                "contentType": att_mime,
+                "contentBytes": base64.b64encode(att_bytes).decode(),
+            }
+            for att_bytes, att_filename, att_mime in attachments
+        ]
         resp = requests.post(
             "https://graph.microsoft.com/v1.0/me/sendMail",
             headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
@@ -243,12 +260,7 @@ def send_email_with_attachment_for_user(
                 "subject": subject,
                 "body": {"contentType": "HTML", "content": html_body},
                 "toRecipients": [{"emailAddress": {"address": to_email}}],
-                "attachments": [{
-                    "@odata.type": "#microsoft.graph.fileAttachment",
-                    "name": attachment_filename,
-                    "contentType": attachment_mime,
-                    "contentBytes": base64.b64encode(attachment_bytes).decode(),
-                }],
+                "attachments": outlook_attachments,
             }})
         if resp.status_code != 202:
             raise EmailProviderError(f"Outlook error: {resp.text}")
@@ -257,8 +269,7 @@ def send_email_with_attachment_for_user(
     elif settings.provider == "smtp":
         smtp_password = decrypt(settings.smtp_password_encrypted)
         message = _build_mime_with_attachment(
-            settings.smtp_from_email, to_email, subject, html_body,
-            attachment_bytes, attachment_filename, attachment_mime)
+            settings.smtp_from_email, to_email, subject, html_body, attachments)
         if settings.smtp_use_tls:
             server = smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=5)
             server.starttls()
@@ -271,6 +282,15 @@ def send_email_with_attachment_for_user(
 
     elif settings.provider == "sendgrid":
         api_key = decrypt(settings.sendgrid_api_key_encrypted)
+        sg_attachments = [
+            {
+                "content": base64.b64encode(att_bytes).decode(),
+                "type": att_mime,
+                "filename": att_filename,
+                "disposition": "attachment",
+            }
+            for att_bytes, att_filename, att_mime in attachments
+        ]
         resp = requests.post(
             "https://api.sendgrid.com/v3/mail/send",
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
@@ -279,15 +299,21 @@ def send_email_with_attachment_for_user(
                 "from": {"email": settings.sendgrid_from_email},
                 "subject": subject,
                 "content": [{"type": "text/html", "value": html_body}],
-                "attachments": [{
-                    "content": base64.b64encode(attachment_bytes).decode(),
-                    "type": attachment_mime,
-                    "filename": attachment_filename,
-                    "disposition": "attachment",
-                }],
+                "attachments": sg_attachments,
             })
         if resp.status_code not in [200, 202]:
             raise EmailProviderError(f"SendGrid error: {resp.text}")
         return {"success": True, "provider": "sendgrid"}
 
     raise EmailProviderError(f"Unsupported provider: {settings.provider}")
+
+
+def send_email_with_attachment_for_user(
+    db: Session, user_id: int, to_email: str, subject: str, html_body: str,
+    attachment_bytes: bytes, attachment_filename: str, attachment_mime: str = "application/pdf",
+) -> dict:
+    """Backward-compatible wrapper — sends a single attachment."""
+    return send_email_with_attachments_for_user(
+        db, user_id, to_email, subject, html_body,
+        [(attachment_bytes, attachment_filename, attachment_mime)],
+    )

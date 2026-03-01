@@ -70,6 +70,27 @@ def update_notes(
     return HTMLResponse('<span class="saved-flash">Saved</span>')
 
 
+@router.patch("/leads/{lead_id}/contact")
+def update_contact(
+    lead_id: str,
+    request: Request,
+    phone: str = Form(""),
+    email: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    user = get_current_user(request, db)
+
+    lead = db.query(Lead).filter(Lead.id == lead_id, Lead.user_id == user.id).first()
+    if not lead:
+        return HTMLResponse("")
+
+    lead.phone = phone.strip() or None
+    lead.email = email.strip() or None
+    db.commit()
+
+    return HTMLResponse('<span class="saved-flash">Saved</span>')
+
+
 @router.delete("/leads/{lead_id}")
 def delete_lead(
     lead_id: str,

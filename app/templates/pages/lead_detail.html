@@ -47,6 +47,25 @@
   </div>
 </div>
 
+<!-- Contact details -->
+<div class="card">
+  <p class="label">Contact details</p>
+  <form hx-patch="/api/leads/{{ lead.id }}/contact" hx-target="#contact-confirm" hx-swap="innerHTML" style="margin-top:8px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group">
+        <label>Phone</label>
+        <input type="text" name="phone" value="{{ lead.phone or '' }}" placeholder="No phone number">
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" name="email" value="{{ lead.email or '' }}" placeholder="No email address">
+      </div>
+    </div>
+    <button type="submit" class="btn btn-primary btn-sm">Save</button>
+    <span id="contact-confirm" style="margin-left:12px"></span>
+  </form>
+</div>
+
 <!-- Notes -->
 <div class="card">
   <p class="label">Notes</p>

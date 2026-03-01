@@ -166,3 +166,27 @@ def bulk_sms_redirect(
     response = Response(status_code=200)
     response.headers["HX-Redirect"] = f"/sms?bulk_token={token}"
     return response
+
+
+@router.post("/leads/bulk-delete")
+def bulk_delete(
+    request: Request,
+    lead_ids: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    user = get_current_user(request, db)
+
+    ids = [lid.strip() for lid in lead_ids.split(",") if lid.strip()]
+    if not ids:
+        return HTMLResponse('<div class="error-msg">No leads selected</div>')
+
+    deleted = db.query(Lead).filter(Lead.id.in_(ids), Lead.user_id == user.id).delete(
+        synchronize_session=False
+    )
+    db.commit()
+
+    request.session["flash"] = f"Deleted {deleted} lead{'s' if deleted != 1 else ''}."
+
+    response = Response(status_code=200)
+    response.headers["HX-Redirect"] = "/leads"
+    return response

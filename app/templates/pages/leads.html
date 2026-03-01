@@ -50,6 +50,11 @@
       <input type="hidden" name="lead_ids" id="bulk-sms-lead-ids">
       <button type="submit" class="btn btn-secondary btn-sm">Direct SMS</button>
     </form>
+    <form id="bulk-delete-form" hx-post="/api/leads/bulk-delete" hx-swap="none"
+          hx-confirm="Delete 0 selected leads? This cannot be undone.">
+      <input type="hidden" name="lead_ids" id="bulk-delete-lead-ids">
+      <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+    </form>
   </div>
 </div>
 
@@ -94,6 +99,9 @@ function updateBulkBar() {
   count.textContent = checks.length + ' selected';
   ids.value = idList.join(',');
   document.getElementById('bulk-sms-lead-ids').value = idList.join(',');
+  document.getElementById('bulk-delete-lead-ids').value = idList.join(',');
+  document.getElementById('bulk-delete-form').setAttribute('hx-confirm',
+    'Delete ' + idList.length + ' selected lead' + (idList.length === 1 ? '' : 's') + '? This cannot be undone.');
 
   var parts = [];
   if (noEmail > 0) parts.push(noEmail + ' without email');
@@ -111,7 +119,7 @@ function toggleSelectAll(checked) {
 }
 
 document.body.addEventListener('htmx:afterRequest', function(e) {
-  if (e.detail.elt && (e.detail.elt.id === 'bulk-email-form' || e.detail.elt.id === 'bulk-sms-form')) {
+  if (e.detail.elt && (e.detail.elt.id === 'bulk-email-form' || e.detail.elt.id === 'bulk-sms-form' || e.detail.elt.id === 'bulk-delete-form')) {
     var xhr = e.detail.xhr;
     var redirect = xhr.getResponseHeader('HX-Redirect');
     if (redirect) window.location.href = redirect;

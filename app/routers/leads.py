@@ -117,3 +117,31 @@ def bulk_email_redirect(
     response = Response(status_code=200)
     response.headers["HX-Redirect"] = f"/email?bulk_token={token}"
     return response
+
+
+@router.post("/leads/bulk-sms")
+def bulk_sms_redirect(
+    request: Request,
+    lead_ids: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    user = get_current_user(request, db)
+
+    ids = [lid.strip() for lid in lead_ids.split(",") if lid.strip()]
+    if not ids:
+        return HTMLResponse('<div class="error-msg">No leads selected</div>')
+
+    # Evict oldest entries if cache is full
+    while len(_bulk_selections) >= _BULK_SELECTIONS_MAX:
+        oldest_key = next(iter(_bulk_selections))
+        _bulk_selections.pop(oldest_key, None)
+
+    token = str(_uuid.uuid4()).replace("-", "")[:12]
+    _bulk_selections[token] = {
+        "user_id": user.id,
+        "lead_ids": ids,
+    }
+
+    response = Response(status_code=200)
+    response.headers["HX-Redirect"] = f"/sms?bulk_token={token}"
+    return response

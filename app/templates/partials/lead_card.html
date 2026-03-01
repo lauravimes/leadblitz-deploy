@@ -1,6 +1,7 @@
 <div class="lead-card" id="lead-{{ lead.id }}">
   <input type="checkbox" class="lead-select" value="{{ lead.id }}"
          data-has-email="{{ '1' if lead.email else '0' }}"
+         data-has-phone="{{ '1' if lead.phone else '0' }}"
          data-has-score="{{ '1' if lead.score is not none else '0' }}"
          onchange="updateBulkBar()">
   <div class="lead-info">

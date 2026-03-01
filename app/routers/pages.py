@@ -199,11 +199,46 @@ def email_page(
 
 
 @router.get("/sms")
-def sms_page(request: Request, db: Session = Depends(get_db)):
+def sms_page(
+    request: Request,
+    bulk_token: str = None,
+    db: Session = Depends(get_db),
+):
     user = get_current_user(request, db)
+
+    # --- Bulk SMS mode ---
+    if bulk_token:
+        from app.routers.leads import _bulk_selections
+
+        selection = _bulk_selections.pop(bulk_token, None)
+        if not selection or selection["user_id"] != user.id:
+            return RedirectResponse("/leads", status_code=302)
+
+        bulk_leads = (
+            db.query(Lead)
+            .filter(Lead.id.in_(selection["lead_ids"]), Lead.user_id == user.id)
+            .all()
+        )
+        return _tpl(request).TemplateResponse(
+            "pages/sms.html",
+            {
+                "request": request,
+                "user": user,
+                "active_page": "sms",
+                "is_bulk": True,
+                "bulk_leads": bulk_leads,
+            },
+        )
+
     return _tpl(request).TemplateResponse(
         "pages/sms.html",
-        {"request": request, "user": user, "active_page": "sms"},
+        {
+            "request": request,
+            "user": user,
+            "active_page": "sms",
+            "is_bulk": False,
+            "bulk_leads": [],
+        },
     )
 
 

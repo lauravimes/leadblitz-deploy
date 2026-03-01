@@ -7,6 +7,57 @@
   <span class="subtext">2 credits per SMS</span>
 </div>
 
+{% if is_bulk and bulk_leads %}
+{# ───── BULK SMS MODE ───── #}
+{% set leads_with_phone = bulk_leads | selectattr('phone') | list %}
+{% set leads_no_phone   = bulk_leads | rejectattr('phone') | list %}
+
+<div class="merge-info">
+  <h3>Bulk SMS: {{ bulk_leads | length }} lead{{ 's' if bulk_leads | length != 1 }}</h3>
+  <div class="merge-stats">
+    <span>{{ leads_with_phone | length }} with phone</span>
+    {% if leads_no_phone %}<span>{{ leads_no_phone | length }} without phone (skipped)</span>{% endif %}
+  </div>
+  <details>
+    <summary>View all {{ bulk_leads | length }} leads</summary>
+    <div class="merge-lead-list">
+      {% for lead in bulk_leads %}
+      <div class="merge-lead-item">
+        <span style="flex:1;font-weight:500">{{ lead.name }}</span>
+        <span>{{ lead.phone or 'No phone' }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </details>
+</div>
+
+<div class="card">
+  <h2>Compose SMS</h2>
+  <p class="subtext" style="margin-bottom:16px">Use {{business_name}}, {{city}}, {{score}} as variables</p>
+  <form id="sms-form" style="margin-top:16px">
+    <input type="hidden" name="lead_ids" id="sms-lead-ids"
+           value="{{ bulk_leads | map(attribute='id') | join(',') }}">
+    <div class="form-group">
+      <label>Message template</label>
+      <textarea name="template" id="sms-template" rows="4" placeholder="Hi {{business_name}}, I noticed your website could use some updates. I help businesses in {{city}} grow online. Interested in a free chat?"></textarea>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button type="button" class="btn btn-secondary btn-sm"
+              hx-post="/api/sms/preview"
+              hx-include="#sms-form"
+              hx-target="#sms-preview">Preview</button>
+      <button type="button" class="btn btn-primary btn-sm"
+              hx-post="/api/sms/send"
+              hx-include="#sms-form"
+              hx-target="#sms-status"
+              hx-confirm="Send SMS to {{ leads_with_phone | length }} lead{{ 's' if leads_with_phone | length != 1 }}? (2 credits each)">Send</button>
+    </div>
+    <span id="sms-status" style="margin-left:12px"></span>
+  </form>
+</div>
+
+{% else %}
+{# ───── SINGLE / EMPTY COMPOSE MODE ───── #}
 <div class="card">
   <h2>Compose SMS</h2>
   <p class="subtext" style="margin-bottom:16px">Use {{business_name}}, {{city}}, {{score}} as variables</p>
@@ -33,6 +84,7 @@
     <span id="sms-status" style="margin-left:12px"></span>
   </form>
 </div>
+{% endif %}
 
 <div id="sms-preview" style="margin-top:16px"></div>
 {% endblock %}

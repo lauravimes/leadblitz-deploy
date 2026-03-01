@@ -46,6 +46,10 @@
       <input type="hidden" name="attach_report" value="1">
       <button type="submit" class="btn btn-primary btn-sm">Email with Report</button>
     </form>
+    <form id="bulk-sms-form" hx-post="/api/leads/bulk-sms" hx-swap="none">
+      <input type="hidden" name="lead_ids" id="bulk-sms-lead-ids">
+      <button type="submit" class="btn btn-secondary btn-sm">Direct SMS</button>
+    </form>
   </div>
 </div>
 
@@ -78,19 +82,22 @@ function updateBulkBar() {
   }
   bar.style.display = '';
 
-  var noEmail = 0, noScore = 0;
+  var noEmail = 0, noPhone = 0, noScore = 0;
   var idList = [];
   checks.forEach(function(cb) {
     idList.push(cb.value);
     if (cb.dataset.hasEmail === '0') noEmail++;
+    if (cb.dataset.hasPhone === '0') noPhone++;
     if (cb.dataset.hasScore === '0') noScore++;
   });
 
   count.textContent = checks.length + ' selected';
   ids.value = idList.join(',');
+  document.getElementById('bulk-sms-lead-ids').value = idList.join(',');
 
   var parts = [];
   if (noEmail > 0) parts.push(noEmail + ' without email');
+  if (noPhone > 0) parts.push(noPhone + ' without phone');
   if (noScore > 0) parts.push(noScore + ' without score');
   warnings.textContent = parts.length ? '(' + parts.join(', ') + ')' : '';
 
@@ -104,7 +111,7 @@ function toggleSelectAll(checked) {
 }
 
 document.body.addEventListener('htmx:afterRequest', function(e) {
-  if (e.detail.elt && e.detail.elt.id === 'bulk-email-form') {
+  if (e.detail.elt && (e.detail.elt.id === 'bulk-email-form' || e.detail.elt.id === 'bulk-sms-form')) {
     var xhr = e.detail.xhr;
     var redirect = xhr.getResponseHeader('HX-Redirect');
     if (redirect) window.location.href = redirect;

@@ -123,34 +123,6 @@ def toggle_admin(
     return HTMLResponse(f'<span class="saved-flash">{target.email} is now {status}</span>')
 
 
-@router.get("/api/admin/diag-leads")
-def diag_leads(db: Session = Depends(get_db)):
-    """Temporary diagnostic endpoint — remove after use."""
-    from fastapi.responses import JSONResponse
-    from sqlalchemy import text, func
-    total = db.query(Lead).count()
-    with_email = db.query(Lead).filter(Lead.email.isnot(None), Lead.email != "").count()
-    null_email = db.query(Lead).filter(Lead.email.is_(None)).count()
-    with_emailed_at = db.query(Lead).filter(Lead.last_emailed_at.isnot(None)).count()
-    with_source = db.query(Lead).filter(Lead.email_source.isnot(None)).count()
-    alembic_ver = db.execute(text("SELECT version_num FROM alembic_version")).fetchall()
-    oldest = db.query(func.min(Lead.created_at), func.max(Lead.created_at)).first()
-    sample = db.query(Lead.id, Lead.name, Lead.email, Lead.email_source, Lead.last_emailed_at, Lead.emails_sent_count, Lead.created_at).order_by(Lead.created_at.desc()).limit(15).all()
-    return JSONResponse({
-        "total": total, "with_email": with_email, "null_email": null_email,
-        "with_emailed_at": with_emailed_at, "with_email_source": with_source,
-        "alembic": [v[0] for v in alembic_ver],
-        "oldest_lead": str(oldest[0]) if oldest else None,
-        "newest_lead": str(oldest[1]) if oldest else None,
-        "sample": [
-            {"name": s.name, "email": s.email, "email_source": s.email_source,
-             "emailed_at": str(s.last_emailed_at), "count": s.emails_sent_count,
-             "created_at": str(s.created_at)}
-            for s in sample
-        ],
-    })
-
-
 @router.post("/api/admin/backfill-emailed")
 def backfill_emailed(
     request: Request,

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ post.title }} — LeadBlitz Blog</title>
+  <meta name="description" content="{{ post.excerpt }}">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/landing.css">
+  <link rel="stylesheet" href="/static/blog.css">
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav class="landing-nav">
+    <div class="landing-container">
+      <a href="/" class="logo">LeadBlitz</a>
+      <button class="landing-hamburger" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+      <div class="landing-nav-links" id="landing-menu">
+        <a href="/#features">Features</a>
+        <a href="/#pricing">Pricing</a>
+        <a href="/#faq">FAQ</a>
+        <a href="/blog">Blog</a>
+        {% if user %}
+        <a href="/dashboard" class="btn btn-primary btn-sm">Dashboard</a>
+        {% else %}
+        <a href="/login">Login</a>
+        <a href="/register" class="btn btn-primary btn-sm">Start free</a>
+        {% endif %}
+      </div>
+    </div>
+  </nav>
+
+  <!-- Article -->
+  <article class="blog-article">
+    <div class="blog-article-container">
+      <a href="/blog" class="blog-back">&larr; Back to blog</a>
+      <h1 class="blog-article-title">{{ post.title }}</h1>
+      <div class="blog-article-meta">
+        <span>{{ post.author }}</span>
+        <span>{{ post.read_time }}</span>
+      </div>
+      <div class="blog-article-body">
+        {% include post.template %}
+      </div>
+    </div>
+  </article>
+
+  <!-- CTA -->
+  <section class="section section-alt cta-section">
+    <div class="landing-container" style="text-align:center">
+      <h2 class="section-title">Ready to put this into practice?</h2>
+      <p class="section-sub">LeadBlitz finds leads, scores their websites, and helps you send personalised outreach — all in one place.</p>
+      <a href="/register" class="btn btn-primary" style="margin-top:16px">Try LeadBlitz free</a>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="landing-footer">
+    <div class="landing-container">
+      <div class="footer-top">
+        <a href="/" class="logo">LeadBlitz</a>
+        <div class="footer-links">
+          <a href="/#features">Features</a>
+          <a href="/#pricing">Pricing</a>
+          <a href="/#faq">FAQ</a>
+          <a href="/blog">Blog</a>
+          <a href="/login">Login</a>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>GDPR &amp; CAN-SPAM compliant</span>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+  (function(){
+    var btn = document.querySelector('.landing-hamburger');
+    var menu = document.getElementById('landing-menu');
+    if(btn && menu){
+      btn.addEventListener('click', function(){
+        btn.classList.toggle('open');
+        menu.classList.toggle('open');
+      });
+    }
+  })();
+  </script>
+</body>
+</html>

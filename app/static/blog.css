@@ -1,0 +1,45 @@
+/* Blog — LeadBlitz */
+
+/* Listing grid */
+.blog-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:8px}
+
+.blog-card{
+  display:flex;flex-direction:column;
+  border:1px solid var(--border);border-radius:var(--radius);
+  padding:28px 24px;background:var(--card);
+  text-decoration:none;color:inherit;transition:border-color .15s}
+.blog-card:hover{border-color:var(--text)}
+
+.blog-card-title{font-size:1.1rem;font-weight:700;letter-spacing:-.02em;margin-bottom:8px;line-height:1.35}
+.blog-card-excerpt{font-size:.87rem;color:var(--muted);line-height:1.55;flex:1}
+.blog-card-meta{display:flex;gap:16px;margin-top:16px;font-size:.78rem;color:var(--muted);letter-spacing:.01em}
+
+/* Article layout */
+.blog-article{padding:48px 0 60px}
+.blog-article-container{max-width:720px;margin:0 auto;padding:0 24px}
+
+.blog-back{display:inline-block;font-size:.82rem;color:var(--muted);text-decoration:none;margin-bottom:24px}
+.blog-back:hover{color:var(--text)}
+
+.blog-article-title{font-size:2rem;font-weight:800;letter-spacing:-.04em;line-height:1.15;margin-bottom:12px}
+.blog-article-meta{display:flex;gap:16px;font-size:.82rem;color:var(--muted);margin-bottom:40px;padding-bottom:20px;border-bottom:1px solid var(--border)}
+
+/* Article body typography */
+.blog-article-body p{font-size:.95rem;line-height:1.7;color:var(--text);margin-bottom:16px}
+.blog-article-body h2{font-size:1.3rem;font-weight:700;letter-spacing:-.02em;margin:40px 0 12px;color:var(--text)}
+.blog-article-body h3{font-size:1.05rem;font-weight:600;margin:32px 0 8px;color:var(--muted)}
+.blog-article-body ul,.blog-article-body ol{margin:0 0 16px 20px}
+.blog-article-body li{font-size:.93rem;line-height:1.6;color:var(--text);margin-bottom:6px}
+.blog-article-body blockquote{
+  border-left:3px solid var(--border);margin:20px 0;padding:16px 20px;
+  background:#f8f8f8;border-radius:0 var(--radius) var(--radius) 0}
+.blog-article-body blockquote p{font-size:.9rem;color:var(--muted);margin-bottom:8px}
+.blog-article-body blockquote p:last-child{margin-bottom:0}
+
+/* Responsive */
+@media(max-width:600px){
+  .blog-grid{grid-template-columns:1fr}
+  .blog-article{padding:32px 0 40px}
+  .blog-article-title{font-size:1.5rem}
+  .blog-article-body h2{font-size:1.15rem;margin-top:32px}
+}

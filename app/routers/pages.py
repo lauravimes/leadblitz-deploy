@@ -8,6 +8,41 @@ from app.models import User, Campaign, Lead
 
 router = APIRouter(tags=["pages"])
 
+BLOG_POSTS = [
+    {
+        "slug": "cold-email-that-gets-replies",
+        "title": "The Cold Email That Actually Gets Replies",
+        "excerpt": "Why 90% of web design outreach gets ignored — and the specific, observation-based approach that doesn't.",
+        "author": "The LeadBlitz Team",
+        "read_time": "8 min read",
+        "template": "blog/cold-email-that-gets-replies.html",
+    },
+    {
+        "slug": "skip-the-inbox",
+        "title": "Skip the Inbox: Why SMS Is the Fastest Route to Local Business Owners",
+        "excerpt": "SMS has a 98% open rate. Here's how to write texts that start real conversations with local business owners.",
+        "author": "The LeadBlitz Team",
+        "read_time": "9 min read",
+        "template": "blog/skip-the-inbox.html",
+    },
+    {
+        "slug": "follow-up-sequence",
+        "title": "The Follow-Up Sequence That Turns Silence Into Signed Contracts",
+        "excerpt": "80% of deals need at least five follow-ups. A complete 7-touch sequence mixing email and SMS over 25 days.",
+        "author": "The LeadBlitz Team",
+        "read_time": "14 min read",
+        "template": "blog/follow-up-sequence.html",
+    },
+    {
+        "slug": "free-audit-strategy",
+        "title": "The Free Audit Strategy: How Giving Away Your Expertise Wins You Clients",
+        "excerpt": "Stop pitching. Start diagnosing. Why free website audits are the most effective client acquisition tool for freelancers.",
+        "author": "The LeadBlitz Team",
+        "read_time": "10 min read",
+        "template": "blog/free-audit-strategy.html",
+    },
+]
+
 
 def _tpl(request: Request):
     return request.app.state.templates
@@ -359,6 +394,25 @@ def reset_password_page(request: Request, token: str = ""):
     return _tpl(request).TemplateResponse(
         "pages/reset_password.html",
         {"request": request, "user": None, "token": token},
+    )
+
+
+@router.get("/blog")
+def blog_page(request: Request, db: Session = Depends(get_db)):
+    user = get_optional_user(request, db)
+    return _tpl(request).TemplateResponse(
+        "pages/blog.html", {"request": request, "user": user, "posts": BLOG_POSTS}
+    )
+
+
+@router.get("/blog/{slug}")
+def blog_post_page(slug: str, request: Request, db: Session = Depends(get_db)):
+    user = get_optional_user(request, db)
+    post = next((p for p in BLOG_POSTS if p["slug"] == slug), None)
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    return _tpl(request).TemplateResponse(
+        "pages/blog_post.html", {"request": request, "user": user, "post": post}
     )
 
 

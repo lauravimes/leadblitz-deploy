@@ -29,6 +29,7 @@
             <a href="/sms" class="{{ 'active' if active_page == 'sms' }}">SMS</a>
           </div>
         </div>
+        <a href="/blog" class="{{ 'active' if active_page == 'blog' }}">Blog</a>
         <a href="/credits" class="{{ 'active' if active_page == 'credits' }}">
           Credits <span class="credit-badge" id="nav-credits" hx-get="/api/credits/balance" hx-trigger="load" hx-swap="innerHTML">—</span>
         </a>

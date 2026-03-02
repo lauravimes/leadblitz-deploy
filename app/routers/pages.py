@@ -417,7 +417,7 @@ def contact_page(request: Request, db: Session = Depends(get_db)):
 def blog_page(request: Request, db: Session = Depends(get_db)):
     user = get_optional_user(request, db)
     return _tpl(request).TemplateResponse(
-        "pages/blog.html", {"request": request, "user": user, "posts": BLOG_POSTS}
+        "pages/blog.html", {"request": request, "user": user, "posts": BLOG_POSTS, "active_page": "blog"}
     )
 
 
@@ -428,7 +428,7 @@ def blog_post_page(slug: str, request: Request, db: Session = Depends(get_db)):
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
     return _tpl(request).TemplateResponse(
-        "pages/blog_post.html", {"request": request, "user": user, "post": post}
+        "pages/blog_post.html", {"request": request, "user": user, "post": post, "active_page": "blog"}
     )
 
 

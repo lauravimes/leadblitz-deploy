@@ -3,16 +3,20 @@
 
 {% block content %}
 <div class="section-header">
-  <h1>Leads</h1>
+  <h1>Leads <span class="subtext" style="font-size:.87rem;font-weight:400">{{ leads | length }} total</span></h1>
   <div style="display:flex;gap:8px;align-items:center">
-    <span class="subtext">{{ leads | length }} total</span>
     <button class="btn btn-primary btn-sm"
             hx-post="/api/score/batch"
             {% if campaign_filter %}hx-vals='{"campaign_id":"{{ campaign_filter }}"}'{% endif %}
             hx-target="#batch-progress"
             hx-swap="innerHTML">Score all unscored</button>
-    <a href="/import" class="btn btn-secondary btn-sm">Import CSV</a>
-    <a href="/api/csv/export" class="btn btn-secondary btn-sm">Export CSV</a>
+    <div class="more-menu">
+      <button class="btn btn-secondary btn-sm more-menu-toggle" type="button">&#8943;</button>
+      <div class="more-menu-dropdown">
+        <a href="/import">Import CSV</a>
+        <a href="/api/csv/export">Export CSV</a>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -50,11 +54,13 @@
       <input type="hidden" name="lead_ids" id="bulk-sms-lead-ids">
       <button type="submit" class="btn btn-secondary btn-sm">Direct SMS</button>
     </form>
-    <form id="bulk-delete-form" hx-post="/api/leads/bulk-delete" hx-swap="none"
+    <form id="bulk-delete-form" hx-post="/api/leads/bulk-delete"
+          hx-target="#bulk-delete-result" hx-swap="innerHTML"
           hx-confirm="Delete 0 selected leads? This cannot be undone.">
       <input type="hidden" name="lead_ids" id="bulk-delete-lead-ids">
       <button type="submit" class="btn btn-danger btn-sm">Delete</button>
     </form>
+    <span id="bulk-delete-result"></span>
   </div>
 </div>
 
@@ -119,11 +125,30 @@ function toggleSelectAll(checked) {
 }
 
 document.body.addEventListener('htmx:afterRequest', function(e) {
-  if (e.detail.elt && (e.detail.elt.id === 'bulk-email-form' || e.detail.elt.id === 'bulk-sms-form' || e.detail.elt.id === 'bulk-delete-form')) {
+  if (e.detail.elt && e.detail.elt.id === 'bulk-delete-form' && e.detail.successful) {
+    document.querySelectorAll('.lead-select:checked').forEach(function(cb) {
+      var card = cb.closest('.lead-card');
+      if (card) card.remove();
+    });
+    var remaining = document.querySelectorAll('.lead-card').length;
+    var countEl = document.querySelector('.section-header .subtext');
+    if (countEl) countEl.textContent = remaining + ' total';
+    document.getElementById('bulk-bar').style.display = 'none';
+  }
+  if (e.detail.elt && (e.detail.elt.id === 'bulk-email-form' || e.detail.elt.id === 'bulk-sms-form')) {
     var xhr = e.detail.xhr;
     var redirect = xhr.getResponseHeader('HX-Redirect');
     if (redirect) window.location.href = redirect;
   }
+});
+
+// More-menu toggle
+document.querySelector('.more-menu-toggle').addEventListener('click', function(e) {
+  e.stopPropagation();
+  this.closest('.more-menu').classList.toggle('open');
+});
+document.addEventListener('click', function() {
+  document.querySelectorAll('.more-menu.open').forEach(function(m) { m.classList.remove('open'); });
 });
 </script>
 {% endblock %}

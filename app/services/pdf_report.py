@@ -14,8 +14,8 @@ from reportlab.platypus import (
 
 logger = logging.getLogger(__name__)
 
-PURPLE = colors.HexColor("#7c3aed")
-PURPLE_BG = colors.HexColor("#f5f3ff")
+ACCENT = colors.HexColor("#0066ff")
+ACCENT_BG = colors.HexColor("#eff6ff")
 GREEN = colors.HexColor("#16a34a")
 AMBER = colors.HexColor("#d97706")
 RED = colors.HexColor("#dc2626")
@@ -30,7 +30,7 @@ def _get_styles():
     styles = getSampleStyleSheet()
     styles.add(ParagraphStyle("ReportTitle", parent=styles["Title"], fontSize=22, textColor=DARK, spaceAfter=4, fontName="Helvetica-Bold", alignment=TA_CENTER))
     styles.add(ParagraphStyle("ReportSubtitle", parent=styles["Normal"], fontSize=11, textColor=GRAY, spaceAfter=20, alignment=TA_CENTER))
-    styles.add(ParagraphStyle("SectionHeader", parent=styles["Heading2"], fontSize=14, textColor=PURPLE, spaceBefore=16, spaceAfter=8, fontName="Helvetica-Bold"))
+    styles.add(ParagraphStyle("SectionHeader", parent=styles["Heading2"], fontSize=14, textColor=DARK, spaceBefore=16, spaceAfter=8, fontName="Helvetica-Bold"))
     styles.add(ParagraphStyle("BodyText2", parent=styles["Normal"], fontSize=10, textColor=DARK, leading=15, spaceAfter=6))
     styles.add(ParagraphStyle("SmallGray", parent=styles["Normal"], fontSize=9, textColor=GRAY, leading=13))
     styles.add(ParagraphStyle("BulletItem", parent=styles["Normal"], fontSize=10, textColor=DARK, leading=15, leftIndent=16, spaceAfter=4))
@@ -129,7 +129,7 @@ def _build_finding_block(section: Dict, styles) -> list:
         elements.append(Paragraph(f'<font color="#6b7280"><b>Why it matters:</b> {_safe(impact)}</font>', styles["SmallGray"]))
     rec = section.get("recommendation", "")
     if rec:
-        elements.append(Paragraph(f'<font color="{PURPLE.hexval()}"><b>Recommendation:</b> {_safe(rec)}</font>', styles["BodyText2"]))
+        elements.append(Paragraph(f'<font color="{ACCENT.hexval()}"><b>Recommendation:</b> {_safe(rec)}</font>', styles["BodyText2"]))
 
     elements.append(Spacer(1, 4))
     wrapper = Table([[elements]], colWidths=[5.8 * inch])
@@ -191,7 +191,7 @@ def generate_client_pdf(report_data: Dict[str, Any]) -> bytes:
         story.append(Spacer(1, 8))
         story.append(Paragraph("Top Priorities", styles["SectionHeader"]))
         for i, p in enumerate(top_priorities, 1):
-            story.append(Paragraph(f'<font color="{PURPLE.hexval()}"><b>{i}.</b></font> {_safe(p)}', styles["BulletItem"]))
+            story.append(Paragraph(f'<font color="{DARK.hexval()}"><b>{i}.</b></font> {_safe(p)}', styles["BulletItem"]))
 
     story.append(Spacer(1, 20))
     story.append(Paragraph("This report was generated automatically based on publicly available website data.", styles["FooterText"]))
@@ -237,7 +237,7 @@ def generate_internal_pdf(report_data: Dict[str, Any]) -> bytes:
         st.setStyle(TableStyle([
             ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
             ("FONTSIZE", (0, 0), (-1, -1), 10),
-            ("BACKGROUND", (0, 0), (-1, 0), PURPLE),
+            ("BACKGROUND", (0, 0), (-1, 0), DARK),
             ("TEXTCOLOR", (0, 0), (-1, 0), WHITE),
             ("TEXTCOLOR", (0, 1), (-1, -1), DARK),
             ("ROWBACKGROUNDS", (0, 1), (-1, -1), [WHITE, BG_CARD]),

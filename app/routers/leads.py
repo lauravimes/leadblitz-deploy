@@ -185,8 +185,7 @@ def bulk_delete(
     )
     db.commit()
 
-    request.session["flash"] = f"Deleted {deleted} lead{'s' if deleted != 1 else ''}."
-
-    response = Response(status_code=200)
-    response.headers["HX-Redirect"] = "/leads"
+    count_text = f"Deleted {deleted} lead{'s' if deleted != 1 else ''}."
+    response = HTMLResponse(f'<span class="saved-flash">{count_text}</span>')
+    response.headers["HX-Trigger"] = "leadsDeleted"
     return response

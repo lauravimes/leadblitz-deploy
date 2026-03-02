@@ -18,6 +18,20 @@
        hx-target="closest .card"
        hx-swap="outerHTML">
   </div>
+  <script>
+  (function(){
+    document.querySelectorAll('.lead-actions .btn').forEach(function(btn) {
+      if (btn.textContent.trim() === 'Score') {
+        var indicator = btn.nextElementSibling;
+        var badge = document.createElement('span');
+        badge.className = 'stage stage-queued';
+        badge.textContent = 'Queued';
+        btn.parentNode.replaceChild(badge, btn);
+        if (indicator && indicator.classList.contains('htmx-indicator')) indicator.remove();
+      }
+    });
+  })();
+  </script>
   {% else %}
   <script>setTimeout(function(){ window.location.reload(); }, 1500);</script>
   {% endif %}

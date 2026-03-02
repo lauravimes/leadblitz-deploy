@@ -6,6 +6,7 @@ from app.deps import get_db, get_current_user
 from app.config import get_settings
 from app.models import User, Campaign, Lead
 from app.services.places import search_places
+from app.services.credits import credit_manager
 
 router = APIRouter(tags=["search"])
 
@@ -21,6 +22,13 @@ def search(
     templates = request.app.state.templates
     user = get_current_user(request, db)
     settings = get_settings()
+
+    # Check credits
+    has, balance, cost = credit_manager.has_sufficient_credits(db, user.id, "lead_search")
+    if not has:
+        return templates.TemplateResponse(
+            "partials/error.html", {"request": request, "message": f"Insufficient credits. Need {cost}, have {balance}"}
+        )
 
     # Reuse existing campaign or create new one
     campaign = None
@@ -92,6 +100,8 @@ def search(
         leads.append(lead)
     db.commit()
 
+    credit_manager.deduct_credits(db, user.id, "lead_search", 1, f"Search: {business_type} in {location}")
+
     # Refresh to get IDs
     for lead in leads:
         db.refresh(lead)
@@ -124,6 +134,13 @@ def search_more(
     if not campaign:
         return templates.TemplateResponse(
             "partials/error.html", {"request": request, "message": "Campaign not found"}
+        )
+
+    # Check credits
+    has, balance, cost = credit_manager.has_sufficient_credits(db, user.id, "lead_search")
+    if not has:
+        return templates.TemplateResponse(
+            "partials/error.html", {"request": request, "message": f"Insufficient credits. Need {cost}, have {balance}"}
         )
 
     try:
@@ -168,6 +185,8 @@ def search_more(
         db.add(lead)
         leads.append(lead)
     db.commit()
+
+    credit_manager.deduct_credits(db, user.id, "lead_search", 1, f"Search more: {campaign.business_type} in {campaign.location}")
 
     for lead in leads:
         db.refresh(lead)

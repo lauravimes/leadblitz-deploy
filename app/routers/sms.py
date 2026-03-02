@@ -57,7 +57,7 @@ def send_sms_bulk(
     if not leads_with_phone:
         return HTMLResponse('<div class="error-msg">No leads with phone numbers selected</div>')
 
-    # Check credits (2 per SMS)
+    # Check credits
     has, balance, cost = credit_manager.has_sufficient_credits(db, user.id, "sms_send", len(leads_with_phone))
     if not has:
         return HTMLResponse(f'<div class="error-msg">Insufficient credits. Need {cost}, have {balance}</div>')

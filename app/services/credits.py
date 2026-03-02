@@ -10,8 +10,8 @@ logger = logging.getLogger(__name__)
 CREDIT_COSTS = {
     "ai_scoring": 1,
     "email_send": 0,
-    "sms_send": 2,
-    "lead_search": 0,
+    "sms_send": 0,
+    "lead_search": 1,
     "email_personalization": 1,
 }
 

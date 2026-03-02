@@ -255,6 +255,11 @@ a.stat-link:hover{border-color:var(--text)}
 .merge-info .merge-lead-list{margin-top:8px;max-height:200px;overflow-y:auto}
 .merge-info .merge-lead-item{display:flex;gap:12px;padding:4px 0;border-bottom:1px solid #f3f4f6;font-size:.82rem}
 
+/* App footer */
+.app-footer{border-top:1px solid var(--border);padding:20px 0;text-align:center;margin-top:auto}
+.app-footer a{color:var(--muted);text-decoration:none;font-size:.8rem;margin:0 10px}
+.app-footer a:hover{color:var(--text)}
+
 /* Responsive */
 @media(max-width:600px){
   .container{padding:0 16px}

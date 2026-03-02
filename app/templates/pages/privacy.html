@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy Policy — LeadBlitz</title>
+  <meta name="description" content="LeadBlitz privacy policy — how we collect, use, and protect your data.">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/landing.css">
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav class="landing-nav">
+    <div class="landing-container">
+      <a href="/" class="logo">LeadBlitz</a>
+      <button class="landing-hamburger" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+      <div class="landing-nav-links" id="landing-menu">
+        <a href="/#features">Features</a>
+        <a href="/#pricing">Pricing</a>
+        <a href="/#faq">FAQ</a>
+        <a href="/blog">Blog</a>
+        {% if user %}
+        <a href="/dashboard" class="btn btn-primary btn-sm">Dashboard</a>
+        {% else %}
+        <a href="/login">Login</a>
+        <a href="/register" class="btn btn-primary btn-sm">Start free</a>
+        {% endif %}
+      </div>
+    </div>
+  </nav>
+
+  <!-- Privacy Policy -->
+  <section class="section">
+    <div class="landing-container">
+      <p class="section-label">Legal</p>
+      <h1 class="section-title">Privacy Policy</h1>
+      <p class="section-sub">Last updated: March 2026</p>
+
+      <div class="policy-content" style="margin-top:32px;font-size:.93rem;line-height:1.7;color:var(--text)">
+
+        <h2 style="margin-top:32px;margin-bottom:12px">1. What data we collect</h2>
+        <p><strong>Account information</strong> — When you register, we collect your name, email address, and password (stored as a secure hash). If you purchase credits, Stripe processes your payment details; we do not store card numbers.</p>
+        <p style="margin-top:8px"><strong>Usage data</strong> — We log page views, feature usage, and search queries to improve the service. This includes your IP address, browser type, and device information.</p>
+        <p style="margin-top:8px"><strong>Lead and campaign data</strong> — Leads you discover, audit reports you generate, and campaigns you create are stored in your account so you can access them at any time.</p>
+
+        <h2 style="margin-top:32px;margin-bottom:12px">2. How we use your data</h2>
+        <p>We use your data to:</p>
+        <ul style="margin-top:8px;padding-left:20px">
+          <li>Provide and maintain the LeadBlitz service</li>
+          <li>Process credit purchases and manage your account</li>
+          <li>Send transactional emails (password resets, payment receipts)</li>
+          <li>Improve the product based on aggregate usage patterns</li>
+        </ul>
+        <p style="margin-top:8px">We do not sell your personal data to third parties.</p>
+
+        <h2 style="margin-top:32px;margin-bottom:12px">3. Third-party services</h2>
+        <p>LeadBlitz uses the following third-party services that may process your data:</p>
+        <ul style="margin-top:8px;padding-left:20px">
+          <li><strong>Stripe</strong> — Payment processing</li>
+          <li><strong>Google Maps / Places API</strong> — Business search and location data</li>
+          <li><strong>Email delivery providers</strong> — Sending outreach emails on your behalf</li>
+        </ul>
+        <p style="margin-top:8px">Each service operates under its own privacy policy and data processing terms.</p>
+
+        <h2 style="margin-top:32px;margin-bottom:12px">4. Data retention and deletion</h2>
+        <p>Your account data is retained for as long as your account is active. If you delete your account, we will remove your personal data and lead data within 30 days. Some anonymised, aggregate data may be retained for analytics purposes.</p>
+
+        <h2 style="margin-top:32px;margin-bottom:12px">5. Cookies</h2>
+        <p>LeadBlitz uses a single session cookie to keep you logged in. We do not use third-party tracking cookies or advertising pixels.</p>
+
+        <h2 style="margin-top:32px;margin-bottom:12px">6. Your rights (GDPR)</h2>
+        <p>If you are located in the EU/EEA, you have the right to:</p>
+        <ul style="margin-top:8px;padding-left:20px">
+          <li>Access the personal data we hold about you</li>
+          <li>Request correction of inaccurate data</li>
+          <li>Request deletion of your data</li>
+          <li>Object to or restrict processing of your data</li>
+          <li>Request a portable copy of your data</li>
+        </ul>
+
+        <h2 style="margin-top:32px;margin-bottom:12px">7. Contact for data requests</h2>
+        <p>For any privacy-related questions or data requests, please contact us at <a href="mailto:sh@shapplications.com" style="color:var(--accent)">sh@shapplications.com</a>.</p>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="landing-footer">
+    <div class="landing-container">
+      <div class="footer-top">
+        <a href="/" class="logo">LeadBlitz</a>
+        <div class="footer-links">
+          <a href="/#features">Features</a>
+          <a href="/#pricing">Pricing</a>
+          <a href="/#faq">FAQ</a>
+          <a href="/blog">Blog</a>
+          <a href="/login">Login</a>
+          <a href="/privacy">Privacy</a>
+          <a href="/contact">Contact</a>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>GDPR &amp; CAN-SPAM compliant</span>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+  (function(){
+    var btn = document.querySelector('.landing-hamburger');
+    var menu = document.getElementById('landing-menu');
+    if(btn && menu){
+      btn.addEventListener('click', function(){
+        btn.classList.toggle('open');
+        menu.classList.toggle('open');
+      });
+    }
+  })();
+  </script>
+</body>
+</html>

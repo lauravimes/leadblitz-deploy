@@ -397,6 +397,22 @@ def reset_password_page(request: Request, token: str = ""):
     )
 
 
+@router.get("/privacy")
+def privacy_page(request: Request, db: Session = Depends(get_db)):
+    user = get_optional_user(request, db)
+    return _tpl(request).TemplateResponse(
+        "pages/privacy.html", {"request": request, "user": user}
+    )
+
+
+@router.get("/contact")
+def contact_page(request: Request, db: Session = Depends(get_db)):
+    user = get_optional_user(request, db)
+    return _tpl(request).TemplateResponse(
+        "pages/contact.html", {"request": request, "user": user}
+    )
+
+
 @router.get("/blog")
 def blog_page(request: Request, db: Session = Depends(get_db)):
     user = get_optional_user(request, db)

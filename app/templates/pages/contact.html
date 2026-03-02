@@ -3,12 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ post.title }} — LeadBlitz Blog</title>
-  <meta name="description" content="{{ post.excerpt }}">
+  <title>Contact — LeadBlitz</title>
+  <meta name="description" content="Get in touch with LeadBlitz support via email or phone.">
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/style.css">
   <link rel="stylesheet" href="/static/landing.css">
-  <link rel="stylesheet" href="/static/blog.css">
 </head>
 <body>
 
@@ -34,27 +33,23 @@
     </div>
   </nav>
 
-  <!-- Article -->
-  <article class="blog-article">
-    <div class="blog-article-container">
-      <a href="/blog" class="blog-back">&larr; Back to blog</a>
-      <h1 class="blog-article-title">{{ post.title }}</h1>
-      <div class="blog-article-meta">
-        <span>{{ post.author }}</span>
-        <span>{{ post.read_time }}</span>
-      </div>
-      <div class="blog-article-body">
-        {% include post.template %}
-      </div>
-    </div>
-  </article>
+  <!-- Contact -->
+  <section class="section">
+    <div class="landing-container">
+      <p class="section-label">Support</p>
+      <h1 class="section-title">Contact us</h1>
+      <p class="section-sub">We're here to help. Reach out via email or phone.</p>
 
-  <!-- CTA -->
-  <section class="section section-alt cta-section">
-    <div class="landing-container" style="text-align:center">
-      <h2 class="section-title">Ready to put this into practice?</h2>
-      <p class="section-sub">LeadBlitz finds leads, scores their websites, and helps you send personalised outreach — all in one place.</p>
-      <a href="/register" class="btn btn-primary" style="margin-top:16px">Try LeadBlitz free</a>
+      <div style="margin-top:32px;max-width:480px">
+        <div style="padding:24px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);margin-bottom:16px">
+          <p style="font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:6px">Email</p>
+          <a href="mailto:sh@shapplications.com" style="font-size:1.05rem;color:var(--accent);text-decoration:none">sh@shapplications.com</a>
+        </div>
+        <div style="padding:24px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)">
+          <p style="font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:6px">Phone</p>
+          <a href="tel:+447427916999" style="font-size:1.05rem;color:var(--accent);text-decoration:none">+44 7427 916999</a>
+        </div>
+      </div>
     </div>
   </section>
 

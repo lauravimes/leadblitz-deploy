@@ -54,6 +54,7 @@ def _batch_score_worker(lead_ids: list[str], user_id: int, batch_id: str):
                 lead.last_scored_at = datetime.now(timezone.utc)
                 db.commit()
                 status["scored"] += 1
+                status["recently_scored_ids"].append(str(lid))
             except Exception as e:
                 logger.error(f"Batch score error for lead {lid}: {e}")
                 status["failed"] += 1
@@ -89,6 +90,7 @@ def batch_score(
         "scored": 0,
         "failed": 0,
         "skipped": 0,
+        "recently_scored_ids": [],
     }
 
     lead_ids = [l.id for l in leads]
@@ -107,17 +109,42 @@ def batch_score(
 
 @router.get("/score/batch/{batch_id}/status")
 def batch_score_status(batch_id: str, request: Request, db: Session = Depends(get_db)):
-    get_current_user(request, db)
+    user = get_current_user(request, db)
     templates = request.app.state.templates
 
     status = _batch_status.get(batch_id)
     if not status:
         return HTMLResponse('<span class="subtext">Batch not found.</span>')
 
-    return templates.TemplateResponse(
+    # Pop recently scored lead IDs and render their updated cards as OOB swaps
+    scored_ids = status.get("recently_scored_ids", [])
+    status["recently_scored_ids"] = []
+
+    oob_cards = ""
+    if scored_ids:
+        scored_leads = db.query(Lead).filter(
+            Lead.id.in_(scored_ids), Lead.user_id == user.id
+        ).all()
+        for lead in scored_leads:
+            card_resp = templates.TemplateResponse(
+                "partials/lead_card.html", {"request": request, "lead": lead}
+            )
+            card_html = card_resp.body.decode()
+            # Inject hx-swap-oob into the root div to update the card in-place
+            card_html = card_html.replace(
+                f'id="lead-{lead.id}"',
+                f'id="lead-{lead.id}" hx-swap-oob="outerHTML:#lead-{lead.id}"',
+                1,
+            )
+            oob_cards += card_html
+
+    progress_resp = templates.TemplateResponse(
         "partials/batch_progress.html",
         {"request": request, "batch_id": batch_id, "status": status},
     )
+    progress_html = progress_resp.body.decode()
+
+    return HTMLResponse(progress_html + oob_cards)
 
 
 @router.post("/score/{lead_id}")

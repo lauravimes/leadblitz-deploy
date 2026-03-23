@@ -1,8 +1,9 @@
+import html
 import logging
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional, Tuple
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, unquote
 
 import requests
 
@@ -34,7 +35,11 @@ INVALID_DOMAINS = [
     "test.com", "wixpress.com", "sentry.io", "yourmail.com",
 ]
 GENERIC_PREFIXES = ["info", "contact", "hello", "support", "sales", "admin", "enquiries", "mail", "office"]
-CONTACT_PAGE_PATHS = ["/contact", "/contact-us", "/about", "/about-us"]
+CONTACT_PAGE_PATHS = [
+    "/contact", "/contact-us", "/about", "/about-us",
+    "/get-in-touch", "/enquiries", "/team", "/our-team",
+    "/support", "/help", "/connect",
+]
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -66,19 +71,32 @@ def _fetch_page(url: str, timeout: int = 10) -> Tuple[str, str]:
     return (url, "")
 
 
-def _extract_emails_from_html(html: str) -> set:
+def _extract_emails_from_html(raw_html: str) -> set:
     emails = set()
-    if not html:
+    if not raw_html:
         return emails
-    found = EMAIL_REGEX.findall(html)
-    for e in found:
-        emails.add(e.lower().strip())
+
+    # Extract from mailto: links first (most reliable — even if display text is obfuscated)
+    mailto_matches = re.findall(r'href=["\']mailto:([^"\'?]+)', raw_html, re.IGNORECASE)
+    for addr in mailto_matches:
+        addr = unquote(addr).strip()
+        if "@" in addr and "." in addr:
+            emails.add(addr.lower().strip())
+
+    # Decode HTML entities (&#64; → @, &#46; → ., &commat; → @, etc.)
+    decoded = html.unescape(raw_html)
+
+    # Standard regex extraction on both raw and decoded HTML
+    for text in [raw_html, decoded]:
+        for e in EMAIL_REGEX.findall(text):
+            emails.add(e.lower().strip())
+
     # Obfuscated patterns
     for pattern in [
         r"([a-zA-Z0-9._%+-]+)\s*\[\s*at\s*\]\s*([a-zA-Z0-9.-]+)\s*\[\s*dot\s*\]\s*([a-zA-Z]{2,})",
         r"([a-zA-Z0-9._%+-]+)\s*\(\s*at\s*\)\s*([a-zA-Z0-9.-]+)\s*\(\s*dot\s*\)\s*([a-zA-Z]{2,})",
     ]:
-        matches = re.findall(pattern, html, re.IGNORECASE)
+        matches = re.findall(pattern, decoded, re.IGNORECASE)
         for m in matches:
             if isinstance(m, tuple) and len(m) == 3:
                 emails.add(f"{m[0]}@{m[1]}.{m[2]}".lower().strip())

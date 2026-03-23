@@ -33,6 +33,12 @@
   })();
   </script>
   {% else %}
-  <script>setTimeout(function(){ window.location.reload(); }, 1500);</script>
+  <script>
+  // Remove any remaining "Queued" badges for leads that were scored
+  document.querySelectorAll('.stage-queued').forEach(function(badge) {
+    var card = badge.closest('.lead-card');
+    if (card && card.querySelector('.score')) badge.remove();
+  });
+  </script>
   {% endif %}
 </div>

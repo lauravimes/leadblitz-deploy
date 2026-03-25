@@ -8,7 +8,7 @@ version = "2.0.0"
 description = "Lead generation SaaS — Find, Score, Review"
 requires-python = ">=3.9"
 dependencies = [
-    "fastapi",
+    "fastapi<0.112.0",
     "uvicorn[standard]",
     "jinja2",
     "sqlalchemy>=2.0",

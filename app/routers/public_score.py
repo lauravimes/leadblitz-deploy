@@ -80,7 +80,7 @@ def score_url(
     try:
         result = score_website_hybrid(
             db=db,
-            url=url,
+            url=normalized,
             api_key=settings.openai_api_key,
         )
     except Exception as e:

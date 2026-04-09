@@ -1,0 +1,14 @@
+<div class="card report-section">
+  <h3>Mobile speed</h3>
+  <div style="display:flex;align-items:center;gap:16px;margin-top:10px">
+    <span class="score {{ 'score-high' if pagespeed.performance_score >= 90 else ('score-mid' if pagespeed.performance_score >= 50 else 'score-low') }}" style="font-size:1.4rem;padding:6px 14px">{{ pagespeed.performance_score }}</span>
+    <span class="subtext">Lighthouse mobile performance</span>
+  </div>
+  <div class="breakdown-grid" style="margin-top:12px">
+    {% if pagespeed.fcp_display %}<div class="breakdown-item"><span class="breakdown-label">First Paint</span><span class="breakdown-score">{{ pagespeed.fcp_display }}</span></div>{% endif %}
+    {% if pagespeed.lcp_display %}<div class="breakdown-item"><span class="breakdown-label">Largest Paint</span><span class="breakdown-score">{{ pagespeed.lcp_display }}</span></div>{% endif %}
+    {% if pagespeed.tbt_display %}<div class="breakdown-item"><span class="breakdown-label">Blocking Time</span><span class="breakdown-score">{{ pagespeed.tbt_display }}</span></div>{% endif %}
+    {% if pagespeed.cls_display %}<div class="breakdown-item"><span class="breakdown-label">Layout Shift</span><span class="breakdown-score">{{ pagespeed.cls_display }}</span></div>{% endif %}
+    {% if pagespeed.si_display %}<div class="breakdown-item"><span class="breakdown-label">Speed Index</span><span class="breakdown-score">{{ pagespeed.si_display }}</span></div>{% endif %}
+  </div>
+</div>

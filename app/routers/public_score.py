@@ -3,8 +3,9 @@
 import logging
 import time
 from collections import defaultdict
+from urllib.parse import quote
 
-from fastapi import APIRouter, Request, Depends, Form
+from fastapi import APIRouter, Request, Depends, Form, Query
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
@@ -12,6 +13,7 @@ from app.deps import get_db, get_optional_user
 from app.config import get_settings
 from app.services.scorer import score_website_hybrid, normalize_url
 from app.services.technographics import classify_tech_health
+from app.services.pagespeed import fetch_mobile_speed
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["public-score"])
@@ -100,4 +102,24 @@ def score_url(
             "user": user,
             "classify_tech_health": classify_tech_health,
         },
+    )
+
+
+@router.get("/api/pagespeed")
+def pagespeed_check(request: Request, url: str = Query(...)):
+    """Lazy-loaded PageSpeed endpoint — called via HTMX after initial score renders."""
+    templates = request.app.state.templates
+    settings = get_settings()
+
+    normalized = normalize_url(url)
+    if not normalized:
+        return HTMLResponse("")
+
+    pagespeed = fetch_mobile_speed(normalized, settings.google_maps_api_key)
+    if not pagespeed:
+        return HTMLResponse("")
+
+    return templates.TemplateResponse(
+        "partials/pagespeed_card.html",
+        {"request": request, "pagespeed": pagespeed},
     )

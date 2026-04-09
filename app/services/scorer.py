@@ -29,6 +29,12 @@ def url_to_hash(url: str) -> str:
     return hashlib.sha256(url.encode("utf-8")).hexdigest()
 
 
+def _extract_cached_pagespeed(entry) -> Optional[Dict[str, Any]]:
+    """Pull pagespeed data from the heuristic_result JSON (where it's stored alongside heuristic)."""
+    heuristic_data = entry.heuristic_result or {}
+    return heuristic_data.get("pagespeed")
+
+
 def get_cached_score(db: Session, url: str, max_age_hours: int = 24) -> Optional[Dict[str, Any]]:
     normalized = normalize_url(url)
     url_hash = url_to_hash(normalized)
@@ -61,6 +67,7 @@ def get_cached_score(db: Session, url: str, max_age_hours: int = 24) -> Optional
         "ai_justifications": ai_data.get("justifications", {}),
         "plain_english_report": ai_data.get("plain_english_report", {}),
         "rendering_limitations": heuristic_data.get("rendering_limitations", False),
+        "pagespeed": _extract_cached_pagespeed(entry),
         "cached": True,
     }
 
@@ -69,9 +76,14 @@ def save_score_to_cache(db: Session, url: str, score_data: Dict[str, Any]) -> No
     normalized = normalize_url(url)
     url_hash = url_to_hash(normalized)
 
+    # Store pagespeed inside heuristic_result so it survives cache round-trip
+    heuristic_to_store = dict(score_data.get("heuristic") or {})
+    if score_data.get("pagespeed"):
+        heuristic_to_store["pagespeed"] = score_data["pagespeed"]
+
     entry = db.query(ScoreCache).filter(ScoreCache.url_hash == url_hash).first()
     if entry:
-        entry.heuristic_result = score_data.get("heuristic")
+        entry.heuristic_result = heuristic_to_store
         entry.ai_result = score_data.get("ai_review")
         entry.final_score = score_data.get("final_score", 0)
         entry.confidence = score_data.get("confidence", 0.5)
@@ -80,7 +92,7 @@ def save_score_to_cache(db: Session, url: str, score_data: Dict[str, Any]) -> No
         entry = ScoreCache(
             url_hash=url_hash,
             normalized_url=normalized,
-            heuristic_result=score_data.get("heuristic"),
+            heuristic_result=heuristic_to_store,
             ai_result=score_data.get("ai_review"),
             final_score=score_data.get("final_score", 0),
             confidence=score_data.get("confidence", 0.5),
@@ -103,13 +115,15 @@ def score_website_hybrid(db: Session, url: str, api_key: str, use_cache: bool = 
     4. Heuristic scoring
     5. Technographics detection
     6. AI scoring
-    7. Combine + cache
+    7. Mobile page speed (PageSpeed Insights API)
+    8. Combine + cache
     """
     from app.services.site_fetcher import fetch_multiple_pages, extract_site_content_for_ai
     from app.services.site_heuristics import score_site_heuristics
     from app.services.ai_scorer import score_with_ai, combine_scores
     from app.services.framework_detector import detect_js_framework, get_detection_summary
     from app.services.technographics import detect_technographics
+    from app.services.pagespeed import fetch_mobile_speed
 
     # 1. Cache check
     if use_cache:
@@ -171,7 +185,12 @@ def score_website_hybrid(db: Session, url: str, api_key: str, use_cache: bool = 
         technographics=technographics_data,
     )
 
-    # 7. Combine
+    # 7. Mobile page speed
+    from app.config import get_settings as _get_settings
+    google_key = _get_settings().google_maps_api_key
+    pagespeed = fetch_mobile_speed(final_url, google_key) if google_key else None
+
+    # 8. Combine
     result = combine_scores(heuristic, ai_review)
     result["cached"] = False
     result["has_errors"] = False
@@ -179,14 +198,16 @@ def score_website_hybrid(db: Session, url: str, api_key: str, use_cache: bool = 
     result["js_detected"] = detection.get("is_js_heavy", False)
     result["framework_hints"] = detection.get("framework_hints", [])
     result["technographics"] = technographics_data
+    result["pagespeed"] = pagespeed
 
-    # 8. Cache
+    # 9. Cache
     if use_cache:
         cache_data = {
             "heuristic": heuristic,
             "ai_review": ai_review,
             "final_score": result["final_score"],
             "confidence": result["confidence"],
+            "pagespeed": pagespeed,
         }
         save_score_to_cache(db, url, cache_data)
 

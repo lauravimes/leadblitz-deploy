@@ -32,9 +32,10 @@ def create_app() -> FastAPI:
     from app.routers import (
         pages, auth, search, leads, scoring,
         credits, settings, email, enrichment, sms,
-        csv, reports, analytics, admin,
+        csv, reports, analytics, admin, public_score,
     )
 
+    app.include_router(public_score.router)
     app.include_router(pages.router)
     app.include_router(auth.router, prefix="/auth")
     app.include_router(search.router, prefix="/api")

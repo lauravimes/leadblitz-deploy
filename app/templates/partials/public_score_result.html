@@ -1,0 +1,146 @@
+{% set score = result.get('final_score', 0) %}
+{% set breakdown = result.get('breakdown', {}) %}
+{% set heuristic = breakdown.get('heuristic', {}) %}
+{% set ai = breakdown.get('ai', {}) %}
+{% set report = result.get('plain_english_report', {}) %}
+{% set tech = result.get('technographics', {}) %}
+{% set has_errors = result.get('has_errors', False) %}
+
+<!-- Score header -->
+<div class="card" style="text-align:center;margin-top:32px;padding:32px 24px">
+  <p class="label">Website score</p>
+  <div style="margin:12px 0 8px">
+    <span class="score {{ 'score-high' if score >= 70 else ('score-mid' if score >= 40 else 'score-low') }}" style="font-size:2.4rem;padding:8px 20px">
+      {{ score }} / 100
+    </span>
+  </div>
+  <p class="subtext" style="margin-top:8px">{{ url }}</p>
+
+  {% if has_errors %}
+  <p style="color:var(--amber);font-size:.87rem;margin-top:12px">
+    {% if result.get('bot_blocked') %}
+    This site blocked our scanner. The score may not reflect actual quality.
+    {% else %}
+    We had trouble accessing parts of this site. Results may be incomplete.
+    {% endif %}
+  </p>
+  {% endif %}
+</div>
+
+{% if not has_errors or score > 0 %}
+
+<!-- Score breakdown -->
+<div class="card">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <h2>Score breakdown</h2>
+    <div style="display:flex;gap:16px">
+      <div>
+        <p class="label">Technical</p>
+        <span style="font-family:var(--mono);font-size:1.1rem;font-weight:600">{{ result.get('heuristic_score', 0) }}/50</span>
+      </div>
+      <div>
+        <p class="label">AI review</p>
+        <span style="font-family:var(--mono);font-size:1.1rem;font-weight:600">{{ result.get('ai_score', 0) }}/50</span>
+      </div>
+    </div>
+  </div>
+
+  {% if heuristic %}
+  <p class="label">Technical checks</p>
+  <div class="breakdown-grid">
+    <div class="breakdown-item"><span class="breakdown-label">Mobile</span><span class="breakdown-score">{{ heuristic.get('mobile', 0) }}/10</span></div>
+    <div class="breakdown-item"><span class="breakdown-label">Security</span><span class="breakdown-score">{{ heuristic.get('security', 0) }}/10</span></div>
+    <div class="breakdown-item"><span class="breakdown-label">SEO</span><span class="breakdown-score">{{ heuristic.get('seo', 0) }}/8</span></div>
+    <div class="breakdown-item"><span class="breakdown-label">Contact</span><span class="breakdown-score">{{ heuristic.get('contact', 0) }}/8</span></div>
+    <div class="breakdown-item"><span class="breakdown-label">Content</span><span class="breakdown-score">{{ heuristic.get('content', 0) }}/8</span></div>
+    <div class="breakdown-item"><span class="breakdown-label">Tech</span><span class="breakdown-score">{{ heuristic.get('tech', 0) }}/6</span></div>
+  </div>
+  {% endif %}
+
+  {% if ai %}
+  <p class="label" style="margin-top:20px">AI review</p>
+  <div class="breakdown-grid">
+    <div class="breakdown-item"><span class="breakdown-label">Brand</span><span class="breakdown-score">{{ ai.get('brand', 0) }}/12</span></div>
+    <div class="breakdown-item"><span class="breakdown-label">Visual</span><span class="breakdown-score">{{ ai.get('visual', 0) }}/10</span></div>
+    <div class="breakdown-item"><span class="breakdown-label">Conversion</span><span class="breakdown-score">{{ ai.get('conversion', 0) }}/12</span></div>
+    <div class="breakdown-item"><span class="breakdown-label">Trust</span><span class="breakdown-score">{{ ai.get('trust', 0) }}/10</span></div>
+    <div class="breakdown-item"><span class="breakdown-label">Accessibility</span><span class="breakdown-score">{{ ai.get('a11y', 0) }}/6</span></div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Analysis (strengths/weaknesses — the teaser) -->
+{% if report %}
+<div class="card report-section">
+  <h3>Analysis</h3>
+
+  {% if report.get('strengths') %}
+  <p class="label" style="margin-top:12px">Strengths</p>
+  <ul class="report-list">
+    {% for item in report.get('strengths', [])[:3] %}
+    <li>{{ item }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  {% if report.get('weaknesses') %}
+  <p class="label" style="margin-top:12px">Weaknesses</p>
+  <ul class="report-list">
+    {% for item in report.get('weaknesses', [])[:3] %}
+    <li>{{ item }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  {% set total_findings = (report.get('strengths', [])|length) + (report.get('weaknesses', [])|length) + (report.get('sales_opportunities', [])|length) %}
+  {% set shown = [report.get('strengths', [])[:3]|length, report.get('weaknesses', [])[:3]|length]|sum %}
+  {% if total_findings > shown %}
+  <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);text-align:center">
+    <p style="font-size:.87rem;color:var(--muted);margin-bottom:12px">
+      + {{ total_findings - shown }} more findings, sales opportunities, and a branded PDF report
+    </p>
+    <a href="/register" class="btn btn-primary">Sign up free for the full report</a>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- Tech signals (partial teaser) -->
+{% if tech and tech.get('detected') %}
+{% set health = classify_tech_health(tech) if classify_tech_health else {} %}
+<div class="card report-section">
+  <h3>Technology detected</h3>
+  <div style="margin-top:10px">
+    {% set cms = tech.get('cms', {}) %}
+    {% if cms.get('name') and cms.get('name') != 'Custom/Unknown' %}
+    <p style="font-size:.9rem;margin-bottom:8px"><strong>CMS:</strong> {{ cms.get('name') }}{% if tech.get('cms_version') %} {{ tech.get('cms_version') }}{% endif %}</p>
+    {% endif %}
+
+    <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px">
+      {% for item in health.get('green', []) %}
+      <span class="tech-signal tech-green">{{ item.label }}</span>
+      {% endfor %}
+      {% for item in health.get('amber', []) %}
+      <span class="tech-signal tech-amber">{{ item.label }}</span>
+      {% endfor %}
+      {% for item in health.get('red', []) %}
+      <span class="tech-signal tech-red">{{ item.label }}</span>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endif %}
+
+<!-- CTA card -->
+<div class="card" style="text-align:center;background:#f8f9fa;border-color:var(--text);margin-top:24px">
+  <h3 style="margin-bottom:4px">Want to use this to win clients?</h3>
+  <p class="subtext" style="margin-bottom:16px">Generate branded PDF audit reports, find leads by location, and send personalised outreach — all from one dashboard.</p>
+  <a href="/register" class="btn btn-primary">Start free — 200 credits, no card required</a>
+</div>
+
+<!-- Score another -->
+<div style="text-align:center;margin-top:20px">
+  <a href="/score" style="font-size:.87rem;color:var(--muted);text-decoration:underline">Score another website</a>
+</div>

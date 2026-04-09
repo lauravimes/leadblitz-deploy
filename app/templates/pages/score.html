@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Free Website Score — LeadBlitz</title>
+  <meta name="description" content="Paste any website URL and get an instant AI-powered score across 12+ dimensions. Free, no signup required.">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/landing.css">
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav class="landing-nav">
+    <div class="landing-container">
+      <a href="/" class="logo">LeadBlitz</a>
+      <button class="landing-hamburger" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+      <div class="landing-nav-links" id="landing-menu">
+        <a href="/#features">Features</a>
+        <a href="/#pricing">Pricing</a>
+        <a href="/blog">Blog</a>
+        {% if user %}
+        <a href="/dashboard" class="btn btn-primary btn-sm">Dashboard</a>
+        {% else %}
+        <a href="/login">Login</a>
+        <a href="/register" class="btn btn-primary btn-sm">Start free</a>
+        {% endif %}
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero" style="padding-bottom:0">
+    <div class="landing-container">
+      <p class="hero-badge">Free tool</p>
+      <h1 class="hero-title" style="font-size:2.4rem">Score any website<br>in seconds</h1>
+      <p class="hero-sub">Paste a URL below. Our AI analyses 12+ dimensions and gives you<br>an instant, actionable website audit.</p>
+
+      <!-- Score form -->
+      <form
+        hx-post="/score"
+        hx-target="#score-result"
+        hx-indicator="#score-spinner"
+        style="max-width:520px;margin:32px auto 0"
+      >
+        <div style="display:flex;gap:8px">
+          <input
+            type="text"
+            name="url"
+            placeholder="e.g. example.com"
+            required
+            autocomplete="url"
+            style="flex:1"
+          >
+          <button type="submit" class="btn btn-primary">Score it</button>
+        </div>
+        <p class="subtext" style="margin-top:8px;text-align:center">Free. No signup required. Results in ~15 seconds.</p>
+      </form>
+
+      <!-- Loading spinner -->
+      <div id="score-spinner" class="htmx-indicator" style="text-align:center;padding:40px 0">
+        <div class="score-loading">
+          <div class="score-loading-bar"></div>
+        </div>
+        <p class="subtext" style="margin-top:12px">Analysing website across 12+ dimensions...</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Results land here -->
+  <section style="padding:0 0 40px">
+    <div class="landing-container" id="score-result"></div>
+  </section>
+
+  <!-- What we check -->
+  <section class="section section-alt">
+    <div class="landing-container">
+      <p class="section-label">What we analyse</p>
+      <h2 class="section-title">12+ dimensions. Instant results.</h2>
+      <p class="section-sub">The same audit web designers charge hundreds for — free.</p>
+
+      <div class="steps-grid">
+        <div class="step-card">
+          <h3>Mobile responsiveness</h3>
+          <p>Does the site work on phones? Viewport, touch targets, responsive layout.</p>
+        </div>
+        <div class="step-card">
+          <h3>Security &amp; SSL</h3>
+          <p>HTTPS, valid certificates, mixed content warnings.</p>
+        </div>
+        <div class="step-card">
+          <h3>SEO fundamentals</h3>
+          <p>Meta tags, headings, alt texts, Open Graph, canonical URLs.</p>
+        </div>
+        <div class="step-card">
+          <h3>Contact &amp; conversion</h3>
+          <p>Phone numbers, forms, CTAs, email addresses, maps.</p>
+        </div>
+        <div class="step-card">
+          <h3>Brand &amp; visual design</h3>
+          <p>AI-assessed design quality, consistency, typography, whitespace.</p>
+        </div>
+        <div class="step-card">
+          <h3>Trust signals</h3>
+          <p>Testimonials, reviews, case studies, awards, certifications.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="section cta-section">
+    <div class="landing-container" style="text-align:center">
+      <h2 class="section-title">Want the full toolkit?</h2>
+      <p class="section-sub">Search for leads, generate branded PDF reports, and send outreach — all in one place.</p>
+      <a href="/register" class="btn btn-primary" style="margin-top:16px">Start free — 200 credits included</a>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="landing-footer">
+    <div class="landing-container">
+      <div class="footer-top">
+        <a href="/" class="logo">LeadBlitz</a>
+        <div class="footer-links">
+          <a href="/#features">Features</a>
+          <a href="/#pricing">Pricing</a>
+          <a href="/blog">Blog</a>
+          <a href="/login">Login</a>
+          <a href="/privacy">Privacy</a>
+          <a href="/contact">Contact</a>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>GDPR &amp; CAN-SPAM compliant</span>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+  (function(){
+    var btn = document.querySelector('.landing-hamburger');
+    var menu = document.getElementById('landing-menu');
+    if(btn && menu){
+      btn.addEventListener('click', function(){
+        btn.classList.toggle('open');
+        menu.classList.toggle('open');
+      });
+    }
+  })();
+  </script>
+
+  <style>
+  /* Loading animation */
+  .score-loading{width:200px;height:4px;background:var(--border);border-radius:2px;margin:0 auto;overflow:hidden}
+  .score-loading-bar{width:40%;height:100%;background:var(--accent);border-radius:2px;animation:score-slide 1.5s ease-in-out infinite}
+  @keyframes score-slide{0%{transform:translateX(-100%)}100%{transform:translateX(350%)}}
+  .htmx-indicator{display:none}
+  .htmx-request .htmx-indicator{display:block}
+  .htmx-request #score-result{opacity:.3;pointer-events:none}
+  </style>
+
+</body>
+</html>

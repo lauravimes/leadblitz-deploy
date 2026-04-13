@@ -114,39 +114,56 @@ def _batch_enrich_worker(lead_ids: list[str], user_id: int, batch_id: str):
     from app.database import SessionLocal
 
     status = _enrich_batch_status[batch_id]
+    CHUNK_SIZE = 50
 
     def _enrich_single(lid: str):
         db = SessionLocal()
         try:
             lead = db.query(Lead).filter(Lead.id == lid, Lead.user_id == user_id).first()
-            if not lead or not lead.website:
+            if not lead:
+                status["skipped"] += 1
+                return
+            if not lead.website:
+                lead.email_source = "no_website"
+                db.commit()
                 status["skipped"] += 1
                 return
 
-            try:
-                emails = extract_emails_from_website(lead.website, timeout=8)
-                best = choose_best_email(emails)
-                if best:
-                    lead.email = best
-                    lead.email_source = "website"
-                    lead.email_candidates = emails
-                    db.commit()
-                    status["found"] += 1
-                else:
-                    status["not_found"] += 1
-                status["recently_enriched_ids"].append(str(lid))
-            except Exception as e:
-                logger.error(f"Batch enrich error for lead {lid}: {e}")
-                status["failed"] += 1
+            emails = extract_emails_from_website(lead.website, timeout=8)
+            best = choose_best_email(emails)
+            if best:
+                lead.email = best
+                lead.email_source = "website"
+                lead.email_candidates = emails
+            else:
+                lead.email_source = "scraped_none"
+                status["not_found"] += 1
+            db.commit()
+            if best:
+                status["found"] += 1
+            status["recently_enriched_ids"].append(str(lid))
+        except Exception as e:
+            logger.error(f"Batch enrich error for lead {lid}: {e}")
+            status["failed"] += 1
         finally:
             db.close()
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        concurrent.futures.wait(
-            [executor.submit(_enrich_single, lid) for lid in lead_ids]
-        )
-
-    status["status"] = "completed"
+    try:
+        # Process in chunks to avoid memory issues with large batches
+        for i in range(0, len(lead_ids), CHUNK_SIZE):
+            chunk = lead_ids[i:i + CHUNK_SIZE]
+            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+                futures = [executor.submit(_enrich_single, lid) for lid in chunk]
+                for future in concurrent.futures.as_completed(futures, timeout=300):
+                    try:
+                        future.result()
+                    except Exception as e:
+                        logger.error(f"Enrich future error: {e}")
+                        status["failed"] += 1
+    except Exception as e:
+        logger.error(f"Batch enrich worker crashed: {e}")
+    finally:
+        status["status"] = "completed"
 
 
 @router.post("/api/enrich/batch")
@@ -162,6 +179,8 @@ def batch_enrich(
         Lead.user_id == user.id,
         Lead.email.is_(None),
         Lead.website.isnot(None),
+        Lead.website != "",
+        Lead.email_source.is_(None),  # skip leads already scraped with no result
     )
     if campaign_id:
         q = q.filter(Lead.campaign_id == campaign_id)

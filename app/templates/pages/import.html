@@ -8,7 +8,7 @@
 </div>
 
 <div class="card">
-  <p class="subtext" style="margin-bottom:16px">Upload a CSV file with columns: business_name, website_url, email, phone, notes</p>
+  <p class="subtext" style="margin-bottom:16px">Upload a CSV with columns: business_name, email, phone, website_url, notes. Only business_name or email is required — website_url is optional.</p>
   <form hx-post="/api/csv/import" hx-target="#import-results" hx-swap="innerHTML" hx-encoding="multipart/form-data" hx-indicator="#import-indicator">
     <div class="form-group">
       <label>CSV File</label>

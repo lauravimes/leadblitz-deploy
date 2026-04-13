@@ -4,8 +4,8 @@
   {% if summary is defined %}
   <div class="subtext">
     Total rows: {{ summary.total_rows }} &middot;
-    To score: {{ summary.to_score }} &middot;
-    Skipped: {{ summary.skipped_duplicate + summary.skipped_no_url + summary.skipped_invalid }}
+    Imported: {{ summary.to_score }} &middot;
+    Skipped: {{ summary.skipped_duplicate + summary.skipped_empty + summary.skipped_invalid }}
   </div>
   {% endif %}
   {% if import_id %}

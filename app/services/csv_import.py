@@ -14,7 +14,7 @@ from app.models import Lead, CsvImport
 
 logger = logging.getLogger(__name__)
 
-TEMPLATE_HEADERS = ["business_name", "website_url", "email", "phone", "notes"]
+TEMPLATE_HEADERS = ["business_name", "email", "phone", "website_url", "notes"]
 MAX_FILE_SIZE = 10 * 1024 * 1024
 MAX_ROWS = 1000
 
@@ -60,7 +60,8 @@ def get_csv_template() -> str:
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(TEMPLATE_HEADERS)
-    writer.writerow(["Joe's Plumbing", "https://joesplumbing.com", "joe@joesplumbing.com", "555-1234", "Referred by Mike"])
+    writer.writerow(["Joe's Plumbing", "joe@joesplumbing.com", "555-1234", "https://joesplumbing.com", "Referred by Mike"])
+    writer.writerow(["Smith Conservatories", "info@smithconservatories.co.uk", "0118 123 4567", "", ""])
     return output.getvalue()
 
 
@@ -86,8 +87,10 @@ def parse_csv_file(file_content: bytes, filename: str) -> Tuple[Optional[List[Di
             return None, {"error": "empty_file", "message": "No data found in CSV"}
 
         headers_lower = [h.strip().lower() for h in reader.fieldnames]
-        if "website_url" not in headers_lower:
-            return None, {"error": "no_url_column", "message": "Missing website_url column."}
+        has_name = "business_name" in headers_lower
+        has_email = "email" in headers_lower
+        if not has_name and not has_email:
+            return None, {"error": "missing_columns", "message": "CSV must have at least a business_name or email column."}
 
         rows = []
         for row in reader:
@@ -115,24 +118,32 @@ def process_csv_rows(db: Session, rows: List[Dict], user_id: int, import_id: str
     existing_domains = {normalize_domain(l.website) for l in existing_leads if l.website}
 
     seen_domains = set()
-    skipped_no_url = 0
+    skipped_empty = 0
     skipped_duplicate = 0
     skipped_invalid = 0
     valid_leads = []
 
     for row in rows:
+        name = row.get("business_name", "").strip()
+        email = row.get("email", "").strip()
         url = row.get("website_url", "").strip()
-        if not url:
-            skipped_no_url += 1
+
+        # Must have at least a name or email
+        if not name and not email and not url:
+            skipped_empty += 1
             continue
-        if not validate_url_format(url):
-            skipped_invalid += 1
-            continue
-        domain = normalize_domain(url)
-        if domain in seen_domains or domain in existing_domains:
-            skipped_duplicate += 1
-            continue
-        seen_domains.add(domain)
+
+        # If URL provided, validate and deduplicate
+        if url:
+            if not validate_url_format(url):
+                skipped_invalid += 1
+                continue
+            domain = normalize_domain(url)
+            if domain in seen_domains or domain in existing_domains:
+                skipped_duplicate += 1
+                continue
+            seen_domains.add(domain)
+
         valid_leads.append(row)
 
     to_score = len(valid_leads)
@@ -148,7 +159,7 @@ def process_csv_rows(db: Session, rows: List[Dict], user_id: int, import_id: str
         pending_count=to_score,
         status="in_progress",
         skipped_duplicate=skipped_duplicate,
-        skipped_no_url=skipped_no_url,
+        skipped_no_url=skipped_empty,
         skipped_invalid=skipped_invalid,
     )
     db.add(csv_import)
@@ -157,27 +168,34 @@ def process_csv_rows(db: Session, rows: List[Dict], user_id: int, import_id: str
     lead_ids_to_score = []
     for row in valid_leads:
         lead_id = str(uuid.uuid4())
-        url = normalize_url(row.get("website_url", ""))
-        name = row.get("business_name", "").strip() or normalize_domain(url)
+        raw_url = row.get("website_url", "").strip()
+        url = normalize_url(raw_url) if raw_url else ""
+        name = row.get("business_name", "").strip()
+        if not name and url:
+            name = normalize_domain(url)
+        elif not name:
+            name = row.get("email", "").strip()
         email = row.get("email", "").strip()
         phone = row.get("phone", "").strip()
         notes = row.get("notes", "").strip()
 
+        has_website = bool(raw_url)
         lead = Lead(
             id=lead_id,
             user_id=user_id,
             name=name,
-            website=url,
+            website=url if has_website else "",
             email=email or None,
             phone=phone,
             notes=notes,
             source="import",
             import_id=import_id,
-            import_status="queued",
+            import_status="queued" if has_website else "scored",
             stage="new",
         )
         db.add(lead)
-        lead_ids_to_score.append(lead_id)
+        if has_website:
+            lead_ids_to_score.append(lead_id)
 
     db.commit()
 
@@ -188,7 +206,7 @@ def process_csv_rows(db: Session, rows: List[Dict], user_id: int, import_id: str
             "total_rows": len(rows),
             "to_score": to_score,
             "skipped_duplicate": skipped_duplicate,
-            "skipped_no_url": skipped_no_url,
+            "skipped_empty": skipped_empty,
             "skipped_invalid": skipped_invalid,
         },
         "message": f"{to_score} leads imported.",

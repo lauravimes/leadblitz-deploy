@@ -68,6 +68,14 @@ Best regards{% endif %}</textarea>
       <label>Attach file (optional, max 10 MB)</label>
       <input type="file" name="attachment">
     </div>
+    <div class="form-group">
+      <label>Send speed</label>
+      <select name="send_rate">
+        <option value="0">No limit (paid plan)</option>
+        <option value="100" selected>100/day (SendGrid free tier)</option>
+        <option value="500">500/day (Gmail / Workspace)</option>
+      </select>
+    </div>
     <div style="display:flex;gap:8px;margin-top:12px">
       <button type="button" class="btn btn-secondary btn-sm"
               hx-post="/api/email/preview"

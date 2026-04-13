@@ -1,5 +1,6 @@
 import logging
 import threading
+import time
 import uuid as _uuid
 from datetime import datetime, timezone
 
@@ -52,12 +53,17 @@ def _batch_send_worker(
     lead_ids: list[str], user_id: int, send_id: str,
     subject: str, body: str, attach_report: bool,
     custom_attachment: tuple[bytes, str, str] | None = None,
+    send_rate: int = 0,
 ):
     """Background thread that sends emails one by one (with optional PDF and/or custom file)."""
     from app.database import SessionLocal
 
     db = SessionLocal()
     status = _send_status[send_id]
+
+    # Calculate delay between emails based on daily rate limit
+    # e.g. 100/day = 1 email per 864 seconds, 500/day = 1 per 172.8s
+    delay = (86400.0 / send_rate) if send_rate > 0 else 0
 
     try:
         leads = db.query(Lead).filter(Lead.id.in_(lead_ids), Lead.user_id == user_id).all()
@@ -66,7 +72,12 @@ def _batch_send_worker(
         status["skipped"] = skipped
         status["total"] = len(leads_with_email) + skipped
 
-        for lead in leads_with_email:
+        for i, lead in enumerate(leads_with_email):
+            # Rate limiting: sleep between sends (skip delay before first email)
+            if delay > 0 and i > 0:
+                status["waiting_until"] = time.time() + delay
+                time.sleep(delay)
+                status.pop("waiting_until", None)
             rendered_subject = subject.replace("{{business_name}}", lead.name or "")
             rendered_body = body.replace("{{business_name}}", lead.name or "").replace("{{website}}", lead.website or "")
 
@@ -129,6 +140,7 @@ async def send_emails(
     body: str = Form(...),
     lead_ids: str = Form(""),
     attach_report: str = Form(""),
+    send_rate: int = Form(0),
     attachment: UploadFile = File(None),
     db: Session = Depends(get_db),
 ):
@@ -156,8 +168,8 @@ async def send_emails(
 
     use_report = attach_report == "1"
 
-    # For large batches, use background thread
-    if len(leads_with_email) > 3:
+    # For large batches or rate-limited sends, use background thread
+    if len(leads_with_email) > 3 or send_rate > 0:
         send_id = str(_uuid.uuid4())[:8]
         _send_status[send_id] = {
             "status": "in_progress",
@@ -166,11 +178,12 @@ async def send_emails(
             "failed": 0,
             "skipped": 0,
             "errors": [],
+            "send_rate": send_rate,
         }
         thread = threading.Thread(
             target=_batch_send_worker,
             args=([l.id for l in leads], user.id, send_id, subject, body, use_report),
-            kwargs={"custom_attachment": custom_attachment},
+            kwargs={"custom_attachment": custom_attachment, "send_rate": send_rate},
             daemon=True,
         )
         thread.start()

@@ -8,6 +8,14 @@
   </div>
   <div class="subtext" style="margin-top:8px">
     {{ status.sent }} sent &middot; {{ status.failed }} failed &middot; {{ status.skipped }} skipped &middot; {{ total - done }} remaining
+    {% if status.send_rate %}
+    &middot; {{ status.send_rate }}/day limit
+    {% set remaining_emails = total - done %}
+    {% if remaining_emails > 0 and status.status != 'completed' %}
+    {% set days_left = (remaining_emails / status.send_rate) | round(1) %}
+    &middot; ~{{ days_left }} day{{ 's' if days_left != 1.0 }} left
+    {% endif %}
+    {% endif %}
     {% if status.status == 'completed' %}
     <span class="saved-flash" style="margin-left:8px">Complete</span>
     {% endif %}
@@ -21,7 +29,7 @@
   {% endif %}
   {% if status.status != 'completed' %}
   <div hx-get="/api/email/send/{{ send_id }}/status"
-       hx-trigger="every 3s"
+       hx-trigger="every {{ '30s' if status.send_rate else '3s' }}"
        hx-target="closest .card"
        hx-swap="outerHTML">
   </div>

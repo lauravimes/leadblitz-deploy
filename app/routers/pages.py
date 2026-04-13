@@ -103,6 +103,7 @@ def leads_page(
     stage: str = None,
     campaign_id: str = None,
     scored: str = None,
+    has_email: str = None,
     db: Session = Depends(get_db),
 ):
     user = get_current_user(request, db)
@@ -113,6 +114,10 @@ def leads_page(
         q = q.filter(Lead.campaign_id == campaign_id)
     if scored == "1":
         q = q.filter(Lead.score.isnot(None))
+    if has_email == "1":
+        q = q.filter(Lead.email.isnot(None))
+    elif has_email == "0":
+        q = q.filter(Lead.email.is_(None))
     leads = q.order_by(Lead.created_at.desc()).all()
 
     campaigns = (
@@ -131,6 +136,7 @@ def leads_page(
             "stage_filter": stage,
             "campaign_filter": campaign_id,
             "scored_filter": scored,
+            "email_filter": has_email,
             "active_page": "leads",
         },
     )

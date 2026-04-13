@@ -87,10 +87,9 @@ def parse_csv_file(file_content: bytes, filename: str) -> Tuple[Optional[List[Di
             return None, {"error": "empty_file", "message": "No data found in CSV"}
 
         headers_lower = [h.strip().lower() for h in reader.fieldnames]
-        has_name = "business_name" in headers_lower
-        has_email = "email" in headers_lower
-        if not has_name and not has_email:
-            return None, {"error": "missing_columns", "message": "CSV must have at least a business_name or email column."}
+        known_cols = {"business_name", "email", "website_url", "phone", "notes"}
+        if not known_cols.intersection(headers_lower):
+            return None, {"error": "missing_columns", "message": "CSV must have at least one recognised column: business_name, email, website_url, phone, or notes."}
 
         rows = []
         for row in reader:

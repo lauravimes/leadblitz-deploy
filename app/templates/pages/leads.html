@@ -29,7 +29,7 @@
   <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:.87rem;color:var(--muted)">
     <input type="checkbox" id="select-all" onchange="toggleSelectAll(this.checked)"> Select all
   </label>
-  <select onchange="window.location.href='/leads?stage=' + this.value">
+  <select onchange="filterLeads('stage', this.value)">
     <option value="" {{ 'selected' if not stage_filter }}>All stages</option>
     <option value="new" {{ 'selected' if stage_filter == 'new' }}>New</option>
     <option value="reviewing" {{ 'selected' if stage_filter == 'reviewing' }}>Reviewing</option>
@@ -37,13 +37,18 @@
     <option value="rejected" {{ 'selected' if stage_filter == 'rejected' }}>Rejected</option>
   </select>
   {% if campaigns %}
-  <select onchange="window.location.href='/leads?campaign_id=' + this.value + '{% if stage_filter %}&stage={{ stage_filter }}{% endif %}'">
+  <select onchange="filterLeads('campaign_id', this.value)">
     <option value="">All campaigns</option>
     {% for c in campaigns %}
     <option value="{{ c.id }}" {{ 'selected' if campaign_filter == c.id }}>{{ c.business_type }} in {{ c.location }}</option>
     {% endfor %}
   </select>
   {% endif %}
+  <select onchange="filterLeads('has_email', this.value)">
+    <option value="" {{ 'selected' if not email_filter }}>All leads</option>
+    <option value="1" {{ 'selected' if email_filter == '1' }}>Has email</option>
+    <option value="0" {{ 'selected' if email_filter == '0' }}>No email</option>
+  </select>
 </div>
 
 <div id="bulk-bar" class="bulk-bar" style="display:none">
@@ -90,6 +95,12 @@
 </div>
 
 <script>
+function filterLeads(key, value) {
+  var params = new URLSearchParams(window.location.search);
+  if (value) { params.set(key, value); } else { params.delete(key); }
+  window.location.href = '/leads?' + params.toString();
+}
+
 function updateBulkBar() {
   var checks = document.querySelectorAll('.lead-select:checked');
   var bar = document.getElementById('bulk-bar');

@@ -77,61 +77,131 @@
 <!-- Email Provider Tab -->
 <div id="tab-email-provider" class="tab-content" style="display:none">
   <div class="card">
-    <h2>Email provider</h2>
-    <p class="subtext" style="margin-bottom:16px">Configure how LeadBlitz sends emails on your behalf.</p>
+    <h2>Connect Gmail</h2>
+    <p class="subtext" style="margin-bottom:16px">Send emails from your Gmail account. Uses an app password — your credentials are encrypted and never shared.</p>
 
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px">
-      <a href="/api/settings/email/gmail/url" class="btn btn-secondary btn-sm">Connect Gmail</a>
-      <a href="/api/settings/email/outlook/url" class="btn btn-secondary btn-sm">Connect Outlook</a>
+    <div style="background:#f8f9fa;border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:16px;font-size:.87rem;line-height:1.6">
+      <strong>Setup (one time, takes 2 minutes):</strong>
+      <ol style="margin:8px 0 0;padding-left:20px">
+        <li>Go to <a href="https://myaccount.google.com/apppasswords" target="_blank" style="color:var(--accent)">myaccount.google.com/apppasswords</a></li>
+        <li>You may need to enable 2-step verification first</li>
+        <li>Create a new app password (name it "LeadBlitz" or anything)</li>
+        <li>Copy the 16-character password and paste it below</li>
+      </ol>
     </div>
 
-    <h3 style="margin-top:24px">Or use SMTP</h3>
     <form hx-post="/api/settings/email/smtp" hx-target="#email-status" hx-swap="innerHTML" style="margin-top:12px">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="form-group">
-          <label>SMTP Host</label>
-          <input type="text" name="smtp_host" placeholder="smtp.gmail.com">
+      <input type="hidden" name="smtp_host" value="smtp.gmail.com">
+      <input type="hidden" name="smtp_port" value="587">
+      <div class="form-group">
+        <label>Gmail address</label>
+        <input type="email" name="smtp_from_email" placeholder="you@gmail.com">
+      </div>
+      <div class="form-group">
+        <label>App password</label>
+        <input type="password" name="smtp_password" placeholder="xxxx xxxx xxxx xxxx">
+      </div>
+      <input type="hidden" name="smtp_username" id="gmail-username">
+      <button type="submit" class="btn btn-primary btn-sm">Connect Gmail</button>
+    </form>
+    <script>
+    (function(){
+      var form = document.querySelector('[hx-post="/api/settings/email/smtp"]');
+      if (form) {
+        form.addEventListener('htmx:configRequest', function() {
+          var email = form.querySelector('[name="smtp_from_email"]').value;
+          form.querySelector('[name="smtp_username"]').value = email;
+        });
+      }
+    })();
+    </script>
+  </div>
+
+  <div class="card">
+    <h2>Other providers</h2>
+    <p class="subtext" style="margin-bottom:16px">Use Outlook, custom SMTP, or SendGrid instead.</p>
+
+    <details>
+      <summary style="cursor:pointer;font-weight:500;font-size:.93rem">Outlook</summary>
+      <div style="margin-top:12px">
+        <form hx-post="/api/settings/email/smtp" hx-target="#email-status" hx-swap="innerHTML">
+          <input type="hidden" name="smtp_host" value="smtp-mail.outlook.com">
+          <input type="hidden" name="smtp_port" value="587">
+          <div class="form-group">
+            <label>Outlook email</label>
+            <input type="email" name="smtp_from_email" placeholder="you@outlook.com">
+          </div>
+          <div class="form-group">
+            <label>Password or app password</label>
+            <input type="password" name="smtp_password">
+          </div>
+          <input type="hidden" name="smtp_username" class="outlook-username">
+          <button type="submit" class="btn btn-primary btn-sm">Connect Outlook</button>
+        </form>
+        <script>
+        (function(){
+          var forms = document.querySelectorAll('[value="smtp-mail.outlook.com"]');
+          forms.forEach(function(hidden) {
+            var form = hidden.closest('form');
+            form.addEventListener('htmx:configRequest', function() {
+              var email = form.querySelector('[name="smtp_from_email"]').value;
+              form.querySelector('[name="smtp_username"]').value = email;
+            });
+          });
+        })();
+        </script>
+      </div>
+    </details>
+
+    <details style="margin-top:12px">
+      <summary style="cursor:pointer;font-weight:500;font-size:.93rem">Custom SMTP</summary>
+      <form hx-post="/api/settings/email/smtp" hx-target="#email-status" hx-swap="innerHTML" style="margin-top:12px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group">
+            <label>SMTP Host</label>
+            <input type="text" name="smtp_host" placeholder="smtp.example.com">
+          </div>
+          <div class="form-group">
+            <label>Port</label>
+            <input type="number" name="smtp_port" value="587">
+          </div>
         </div>
         <div class="form-group">
-          <label>Port</label>
-          <input type="number" name="smtp_port" value="587">
+          <label>Username</label>
+          <input type="text" name="smtp_username">
         </div>
-      </div>
-      <div class="form-group">
-        <label>Username</label>
-        <input type="text" name="smtp_username">
-      </div>
-      <div class="form-group">
-        <label>Password</label>
-        <input type="password" name="smtp_password">
-      </div>
-      <div class="form-group">
-        <label>From Email</label>
-        <input type="email" name="smtp_from_email">
-      </div>
-      <button type="submit" class="btn btn-primary btn-sm">Save SMTP</button>
-    </form>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" name="smtp_password">
+        </div>
+        <div class="form-group">
+          <label>From Email</label>
+          <input type="email" name="smtp_from_email">
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">Save SMTP</button>
+      </form>
+    </details>
 
-    <hr style="margin:24px 0;border:none;border-top:1px solid var(--border)">
+    <details style="margin-top:12px">
+      <summary style="cursor:pointer;font-weight:500;font-size:.93rem">SendGrid</summary>
+      <form hx-post="/api/settings/email/sendgrid" hx-target="#email-status" hx-swap="innerHTML" style="margin-top:12px">
+        <div class="form-group">
+          <label>SendGrid API Key</label>
+          <input type="password" name="sendgrid_api_key">
+        </div>
+        <div class="form-group">
+          <label>From Email</label>
+          <input type="email" name="sendgrid_from_email">
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">Save SendGrid</button>
+      </form>
+    </details>
+  </div>
 
-    <h3>Or use SendGrid</h3>
-    <form hx-post="/api/settings/email/sendgrid" hx-target="#email-status" hx-swap="innerHTML" style="margin-top:12px">
-      <div class="form-group">
-        <label>SendGrid API Key</label>
-        <input type="password" name="sendgrid_api_key">
-      </div>
-      <div class="form-group">
-        <label>From Email</label>
-        <input type="email" name="sendgrid_from_email">
-      </div>
-      <button type="submit" class="btn btn-primary btn-sm">Save SendGrid</button>
-    </form>
-
-    <div style="margin-top:20px;display:flex;gap:12px;align-items:center">
-      <button class="btn btn-secondary btn-sm" hx-post="/api/settings/email/test" hx-target="#email-status" hx-swap="innerHTML">Send test email</button>
-      <button class="btn btn-danger btn-sm" hx-delete="/api/settings/email/disconnect" hx-target="#email-status" hx-swap="innerHTML">Disconnect</button>
-      <span id="email-status"></span>
-    </div>
+  <div style="margin-top:20px;display:flex;gap:12px;align-items:center">
+    <button class="btn btn-secondary btn-sm" hx-post="/api/settings/email/test" hx-target="#email-status" hx-swap="innerHTML">Send test email</button>
+    <button class="btn btn-danger btn-sm" hx-delete="/api/settings/email/disconnect" hx-target="#email-status" hx-swap="innerHTML">Disconnect</button>
+    <span id="email-status"></span>
   </div>
 </div>
 

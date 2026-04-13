@@ -5,6 +5,11 @@
 <div class="section-header">
   <h1>Leads <span class="subtext" style="font-size:.87rem;font-weight:400">{{ leads | length }} total</span></h1>
   <div style="display:flex;gap:8px;align-items:center">
+    <button class="btn btn-secondary btn-sm"
+            hx-post="/api/enrich/batch"
+            {% if campaign_filter %}hx-vals='{"campaign_id":"{{ campaign_filter }}"}'{% endif %}
+            hx-target="#enrich-progress"
+            hx-swap="innerHTML">Find all emails</button>
     <button class="btn btn-primary btn-sm"
             hx-post="/api/score/batch"
             {% if campaign_filter %}hx-vals='{"campaign_id":"{{ campaign_filter }}"}'{% endif %}
@@ -64,6 +69,7 @@
   </div>
 </div>
 
+<div id="enrich-progress"></div>
 <div id="batch-progress"></div>
 
 <div class="card" style="padding:0">

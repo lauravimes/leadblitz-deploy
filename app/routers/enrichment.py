@@ -1,4 +1,6 @@
 import logging
+import threading
+import uuid
 
 from fastapi import APIRouter, Request, Depends, Form
 from fastapi.responses import HTMLResponse
@@ -17,6 +19,9 @@ from app.services.encryption import decrypt
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["enrichment"])
+
+# In-memory batch enrichment status tracker
+_enrich_batch_status: dict[str, dict] = {}
 
 
 @router.post("/api/enrich/website")
@@ -101,3 +106,122 @@ def enrich_hunter(
         "partials/enrichment_results.html",
         {"request": request, "results": results},
     )
+
+
+def _batch_enrich_worker(lead_ids: list[str], user_id: int, batch_id: str):
+    """Background thread that scrapes emails from lead websites."""
+    from app.database import SessionLocal
+
+    db = SessionLocal()
+    status = _enrich_batch_status[batch_id]
+
+    try:
+        for lid in lead_ids:
+            lead = db.query(Lead).filter(Lead.id == lid, Lead.user_id == user_id).first()
+            if not lead or not lead.website:
+                status["skipped"] += 1
+                continue
+
+            try:
+                emails = extract_emails_from_website(lead.website, timeout=8)
+                best = choose_best_email(emails)
+                if best:
+                    lead.email = best
+                    lead.email_source = "website"
+                    lead.email_candidates = emails
+                    db.commit()
+                    status["found"] += 1
+                else:
+                    status["not_found"] += 1
+                status["recently_enriched_ids"].append(str(lid))
+            except Exception as e:
+                logger.error(f"Batch enrich error for lead {lid}: {e}")
+                status["failed"] += 1
+    finally:
+        db.close()
+        status["status"] = "completed"
+
+
+@router.post("/api/enrich/batch")
+def batch_enrich(
+    request: Request,
+    campaign_id: str = Form(None),
+    db: Session = Depends(get_db),
+):
+    user = get_current_user(request, db)
+    templates = request.app.state.templates
+
+    q = db.query(Lead).filter(
+        Lead.user_id == user.id,
+        Lead.email.is_(None),
+        Lead.website.isnot(None),
+    )
+    if campaign_id:
+        q = q.filter(Lead.campaign_id == campaign_id)
+
+    leads = q.all()
+    if not leads:
+        return HTMLResponse('<span class="subtext">All leads already have emails (or no website to scrape).</span>')
+
+    batch_id = str(uuid.uuid4())[:8]
+    _enrich_batch_status[batch_id] = {
+        "status": "in_progress",
+        "total": len(leads),
+        "found": 0,
+        "not_found": 0,
+        "failed": 0,
+        "skipped": 0,
+        "recently_enriched_ids": [],
+    }
+
+    lead_ids = [l.id for l in leads]
+    thread = threading.Thread(
+        target=_batch_enrich_worker,
+        args=(lead_ids, user.id, batch_id),
+        daemon=True,
+    )
+    thread.start()
+
+    return templates.TemplateResponse(
+        "partials/enrich_batch_progress.html",
+        {"request": request, "batch_id": batch_id, "status": _enrich_batch_status[batch_id]},
+    )
+
+
+@router.get("/api/enrich/batch/{batch_id}/status")
+def batch_enrich_status(batch_id: str, request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    templates = request.app.state.templates
+
+    status = _enrich_batch_status.get(batch_id)
+    if not status:
+        return HTMLResponse('<span class="subtext">Batch not found.</span>')
+
+    # Pop recently enriched lead IDs and render updated cards as OOB swaps
+    enriched_ids = status.get("recently_enriched_ids", [])
+    status["recently_enriched_ids"] = []
+
+    oob_cards = ""
+    if enriched_ids:
+        enriched_leads = db.query(Lead).filter(
+            Lead.id.in_(enriched_ids), Lead.user_id == user.id
+        ).all()
+        for lead in enriched_leads:
+            card_resp = templates.TemplateResponse(
+                "partials/lead_card.html", {"request": request, "lead": lead}
+            )
+            card_html = card_resp.body.decode()
+            card_html = card_html.replace(
+                f'id="lead-{lead.id}"',
+                f'id="lead-{lead.id}" hx-swap-oob="outerHTML:#lead-{lead.id}"',
+                1,
+            )
+            oob_cards += card_html
+
+    progress_resp = templates.TemplateResponse(
+        "partials/enrich_batch_progress.html",
+        {"request": request, "batch_id": batch_id, "status": status},
+    )
+    progress_html = progress_resp.body.decode()
+
+    return HTMLResponse(progress_html + oob_cards)

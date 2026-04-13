@@ -9,6 +9,7 @@
     <div class="lead-meta">
       {% if lead.address %}<span>{{ lead.address | truncate(50) }}</span>{% endif %}
       {% if lead.phone %}<span>{{ lead.phone }}</span>{% endif %}
+      {% if lead.email %}<span>{{ lead.email }}</span>{% endif %}
       {% if lead.rating %}<span>{{ lead.rating }} ★</span>{% endif %}
     </div>
   </div>

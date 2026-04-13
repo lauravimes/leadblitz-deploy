@@ -52,6 +52,11 @@
     <span id="bulk-warnings" class="subtext"></span>
     <form id="bulk-email-form" hx-post="/api/leads/bulk-email" hx-swap="none">
       <input type="hidden" name="lead_ids" id="bulk-lead-ids">
+      <input type="hidden" name="attach_report" value="0">
+      <button type="submit" class="btn btn-secondary btn-sm">Email</button>
+    </form>
+    <form id="bulk-email-report-form" hx-post="/api/leads/bulk-email" hx-swap="none">
+      <input type="hidden" name="lead_ids" id="bulk-report-lead-ids">
       <input type="hidden" name="attach_report" value="1">
       <button type="submit" class="btn btn-primary btn-sm">Email with Report</button>
     </form>
@@ -110,6 +115,7 @@ function updateBulkBar() {
 
   count.textContent = checks.length + ' selected';
   ids.value = idList.join(',');
+  document.getElementById('bulk-report-lead-ids').value = idList.join(',');
   document.getElementById('bulk-sms-lead-ids').value = idList.join(',');
   document.getElementById('bulk-delete-lead-ids').value = idList.join(',');
   document.getElementById('bulk-delete-form').setAttribute('hx-confirm',
@@ -141,7 +147,7 @@ document.body.addEventListener('htmx:afterRequest', function(e) {
     if (countEl) countEl.textContent = remaining + ' total';
     document.getElementById('bulk-bar').style.display = 'none';
   }
-  if (e.detail.elt && (e.detail.elt.id === 'bulk-email-form' || e.detail.elt.id === 'bulk-sms-form')) {
+  if (e.detail.elt && (e.detail.elt.id === 'bulk-email-form' || e.detail.elt.id === 'bulk-email-report-form' || e.detail.elt.id === 'bulk-sms-form')) {
     var xhr = e.detail.xhr;
     var redirect = xhr.getResponseHeader('HX-Redirect');
     if (redirect) window.location.href = redirect;

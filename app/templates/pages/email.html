@@ -50,11 +50,11 @@
     <div class="form-group">
       <label>Subject (use {{business_name}} and {{website}} as variables)</label>
       <input type="text" name="subject" id="email-subject"
-             value="Website Audit Report — {% raw %}{{business_name}}{% endraw %}">
+             value="{% if attach_report %}Website Audit Report — {% raw %}{{business_name}}{% endraw %}{% endif %}">
     </div>
     <div class="form-group">
       <label>Body (HTML supported, variables will be replaced per lead)</label>
-      <textarea name="body" id="email-body" rows="8">Hi,
+      <textarea name="body" id="email-body" rows="8">{% if attach_report %}Hi,
 
 I took a look at your website and put together a quick audit report with some findings that I think you'll find useful.
 
@@ -62,7 +62,7 @@ I've attached the full report as a PDF — it covers page speed, mobile-friendli
 
 Happy to chat if you'd like to discuss any of it.
 
-Best regards</textarea>
+Best regards{% endif %}</textarea>
     </div>
     <div class="form-group">
       <label>Attach file (optional, max 10 MB)</label>

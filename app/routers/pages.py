@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from app.deps import get_db, get_optional_user, get_current_user
-from app.models import User, Campaign, Lead
+from app.models import User, Campaign, Lead, CsvImport
 
 router = APIRouter(tags=["pages"])
 
@@ -102,6 +102,7 @@ def leads_page(
     request: Request,
     stage: str = None,
     campaign_id: str = None,
+    import_id: str = None,
     scored: str = None,
     has_email: str = None,
     db: Session = Depends(get_db),
@@ -112,6 +113,8 @@ def leads_page(
         q = q.filter(Lead.stage == stage)
     if campaign_id:
         q = q.filter(Lead.campaign_id == campaign_id)
+    if import_id:
+        q = q.filter(Lead.import_id == import_id)
     if scored == "1":
         q = q.filter(Lead.score.isnot(None))
     if has_email == "1":
@@ -126,6 +129,12 @@ def leads_page(
         .order_by(Campaign.created_at.desc())
         .all()
     )
+    imports = (
+        db.query(CsvImport)
+        .filter(CsvImport.user_id == user.id)
+        .order_by(CsvImport.created_at.desc())
+        .all()
+    )
     return _tpl(request).TemplateResponse(
         "pages/leads.html",
         {
@@ -133,8 +142,10 @@ def leads_page(
             "user": user,
             "leads": leads,
             "campaigns": campaigns,
+            "imports": imports,
             "stage_filter": stage,
             "campaign_filter": campaign_id,
+            "import_filter": import_id,
             "scored_filter": scored,
             "email_filter": has_email,
             "active_page": "leads",

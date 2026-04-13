@@ -44,6 +44,14 @@
     {% endfor %}
   </select>
   {% endif %}
+  {% if imports %}
+  <select onchange="filterLeads('import_id', this.value)">
+    <option value="">All imports</option>
+    {% for imp in imports %}
+    <option value="{{ imp.id }}" {{ 'selected' if import_filter == imp.id }}>{{ imp.filename }} ({{ imp.to_score }})</option>
+    {% endfor %}
+  </select>
+  {% endif %}
   <select onchange="filterLeads('has_email', this.value)">
     <option value="" {{ 'selected' if not email_filter }}>All leads</option>
     <option value="1" {{ 'selected' if email_filter == '1' }}>Has email</option>

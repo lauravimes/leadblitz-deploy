@@ -109,18 +109,19 @@ def enrich_hunter(
 
 
 def _batch_enrich_worker(lead_ids: list[str], user_id: int, batch_id: str):
-    """Background thread that scrapes emails from lead websites."""
+    """Background thread that scrapes emails from lead websites using 10 concurrent workers."""
+    import concurrent.futures
     from app.database import SessionLocal
 
-    db = SessionLocal()
     status = _enrich_batch_status[batch_id]
 
-    try:
-        for lid in lead_ids:
+    def _enrich_single(lid: str):
+        db = SessionLocal()
+        try:
             lead = db.query(Lead).filter(Lead.id == lid, Lead.user_id == user_id).first()
             if not lead or not lead.website:
                 status["skipped"] += 1
-                continue
+                return
 
             try:
                 emails = extract_emails_from_website(lead.website, timeout=8)
@@ -137,9 +138,15 @@ def _batch_enrich_worker(lead_ids: list[str], user_id: int, batch_id: str):
             except Exception as e:
                 logger.error(f"Batch enrich error for lead {lid}: {e}")
                 status["failed"] += 1
-    finally:
-        db.close()
-        status["status"] = "completed"
+        finally:
+            db.close()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        concurrent.futures.wait(
+            [executor.submit(_enrich_single, lid) for lid in lead_ids]
+        )
+
+    status["status"] = "completed"
 
 
 @router.post("/api/enrich/batch")

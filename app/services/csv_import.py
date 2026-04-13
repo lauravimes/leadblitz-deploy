@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 TEMPLATE_HEADERS = ["business_name", "email", "phone", "website_url", "notes"]
 MAX_FILE_SIZE = 10 * 1024 * 1024
-MAX_ROWS = 1000
+MAX_ROWS = 10000
 
 
 def generate_import_id() -> str:
@@ -67,7 +67,7 @@ def get_csv_template() -> str:
 
 def parse_csv_file(file_content: bytes, filename: str) -> Tuple[Optional[List[Dict]], Optional[Dict]]:
     if len(file_content) > MAX_FILE_SIZE:
-        return None, {"error": "too_large", "message": "Maximum 1000 leads per import."}
+        return None, {"error": "too_large", "message": "Maximum 10,000 leads per import."}
 
     try:
         text = file_content.decode("utf-8-sig")
@@ -96,7 +96,7 @@ def parse_csv_file(file_content: bytes, filename: str) -> Tuple[Optional[List[Di
         for row in reader:
             rows.append(row)
             if len(rows) > MAX_ROWS:
-                return None, {"error": "too_large", "message": "Maximum 1000 leads per import."}
+                return None, {"error": "too_large", "message": "Maximum 10,000 leads per import."}
 
         if not rows:
             return None, {"error": "empty_file", "message": "No data found in CSV"}

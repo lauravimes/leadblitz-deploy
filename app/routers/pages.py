@@ -105,10 +105,12 @@ def leads_page(
     import_id: str = None,
     scored: str = None,
     has_email: str = None,
+    q: str = None,
     page: int = 1,
     db: Session = Depends(get_db),
 ):
     PAGE_SIZE = 50
+    search_query = q
     user = get_current_user(request, db)
     q = db.query(Lead).filter(Lead.user_id == user.id)
     if stage:
@@ -123,6 +125,15 @@ def leads_page(
         q = q.filter(Lead.email.isnot(None))
     elif has_email == "0":
         q = q.filter(Lead.email.is_(None))
+    if search_query:
+        pattern = f"%{search_query}%"
+        q = q.filter(
+            Lead.name.ilike(pattern)
+            | Lead.email.ilike(pattern)
+            | Lead.phone.ilike(pattern)
+            | Lead.address.ilike(pattern)
+            | Lead.website.ilike(pattern)
+        )
     total_leads = q.count()
     total_pages = max(1, (total_leads + PAGE_SIZE - 1) // PAGE_SIZE)
     page = max(1, min(page, total_pages))
@@ -156,6 +167,7 @@ def leads_page(
             "import_filter": import_id,
             "scored_filter": scored,
             "email_filter": has_email,
+            "search_query": search_query,
             "active_page": "leads",
         },
     )

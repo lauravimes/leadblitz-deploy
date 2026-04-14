@@ -61,6 +61,9 @@
     <option value="1" {{ 'selected' if email_filter == '1' }}>Has email</option>
     <option value="0" {{ 'selected' if email_filter == '0' }}>No email</option>
   </select>
+  <input type="text" placeholder="Search leads..." value="{{ search_query or '' }}"
+         style="flex:1;min-width:150px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:.87rem"
+         onkeydown="if(event.key==='Enter'){filterLeads('q', this.value)}">
 </div>
 
 <div id="bulk-bar" class="bulk-bar" style="display:none">

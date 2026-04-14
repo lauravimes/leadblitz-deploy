@@ -105,8 +105,10 @@ def leads_page(
     import_id: str = None,
     scored: str = None,
     has_email: str = None,
+    page: int = 1,
     db: Session = Depends(get_db),
 ):
+    PAGE_SIZE = 50
     user = get_current_user(request, db)
     q = db.query(Lead).filter(Lead.user_id == user.id)
     if stage:
@@ -121,7 +123,10 @@ def leads_page(
         q = q.filter(Lead.email.isnot(None))
     elif has_email == "0":
         q = q.filter(Lead.email.is_(None))
-    leads = q.order_by(Lead.created_at.desc()).all()
+    total_leads = q.count()
+    total_pages = max(1, (total_leads + PAGE_SIZE - 1) // PAGE_SIZE)
+    page = max(1, min(page, total_pages))
+    leads = q.order_by(Lead.created_at.desc()).offset((page - 1) * PAGE_SIZE).limit(PAGE_SIZE).all()
 
     campaigns = (
         db.query(Campaign)
@@ -141,6 +146,9 @@ def leads_page(
             "request": request,
             "user": user,
             "leads": leads,
+            "total_leads": total_leads,
+            "page": page,
+            "total_pages": total_pages,
             "campaigns": campaigns,
             "imports": imports,
             "stage_filter": stage,

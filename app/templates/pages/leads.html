@@ -3,7 +3,7 @@
 
 {% block content %}
 <div class="section-header">
-  <h1>Leads <span class="subtext" style="font-size:.87rem;font-weight:400">{{ leads | length }} total</span></h1>
+  <h1>Leads <span class="subtext" style="font-size:.87rem;font-weight:400">{{ total_leads }} total</span></h1>
   <div style="display:flex;gap:8px;align-items:center">
     <button class="btn btn-secondary btn-sm"
             hx-post="/api/enrich/batch"
@@ -102,10 +102,23 @@
   </div>
 </div>
 
+{% if total_pages > 1 %}
+<div style="display:flex;justify-content:center;align-items:center;gap:12px;margin-top:16px">
+  {% if page > 1 %}
+  <a href="javascript:void(0)" onclick="filterLeads('page', '{{ page - 1 }}')" class="btn btn-secondary btn-sm">&larr; Prev</a>
+  {% endif %}
+  <span class="subtext">Page {{ page }} of {{ total_pages }}</span>
+  {% if page < total_pages %}
+  <a href="javascript:void(0)" onclick="filterLeads('page', '{{ page + 1 }}')" class="btn btn-secondary btn-sm">Next &rarr;</a>
+  {% endif %}
+</div>
+{% endif %}
+
 <script>
 function filterLeads(key, value) {
   var params = new URLSearchParams(window.location.search);
   if (value) { params.set(key, value); } else { params.delete(key); }
+  if (key !== 'page') { params.delete('page'); }
   window.location.href = '/leads?' + params.toString();
 }
 

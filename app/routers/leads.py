@@ -110,6 +110,47 @@ def delete_lead(
     return response
 
 
+@router.post("/leads/email-all")
+def email_all_filtered(
+    request: Request,
+    campaign_id: str = Form(None),
+    import_id: str = Form(None),
+    stage: str = Form(None),
+    has_email: str = Form(None),
+    attach_report: str = Form("0"),
+    db: Session = Depends(get_db),
+):
+    """Email all leads matching current filters (not just current page)."""
+    user = get_current_user(request, db)
+
+    q = db.query(Lead.id).filter(Lead.user_id == user.id, Lead.email.isnot(None))
+    if campaign_id:
+        q = q.filter(Lead.campaign_id == campaign_id)
+    if import_id:
+        q = q.filter(Lead.import_id == import_id)
+    if stage:
+        q = q.filter(Lead.stage == stage)
+
+    ids = [str(row[0]) for row in q.all()]
+    if not ids:
+        return HTMLResponse('<div class="error-msg">No leads with email match the current filters</div>')
+
+    while len(_bulk_selections) >= _BULK_SELECTIONS_MAX:
+        oldest_key = next(iter(_bulk_selections))
+        _bulk_selections.pop(oldest_key, None)
+
+    token = str(_uuid.uuid4()).replace("-", "")[:12]
+    _bulk_selections[token] = {
+        "user_id": user.id,
+        "lead_ids": ids,
+        "attach_report": attach_report == "1",
+    }
+
+    response = Response(status_code=200)
+    response.headers["HX-Redirect"] = f"/email?bulk_token={token}"
+    return response
+
+
 @router.post("/leads/bulk-email")
 def bulk_email_redirect(
     request: Request,

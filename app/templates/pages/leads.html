@@ -6,6 +6,10 @@
   <h1>Leads <span class="subtext" style="font-size:.87rem;font-weight:400">{{ total_leads }} total</span></h1>
   <div style="display:flex;gap:8px;align-items:center">
     <button class="btn btn-secondary btn-sm"
+            hx-post="/api/leads/email-all"
+            hx-vals='{ {% if campaign_filter %}"campaign_id":"{{ campaign_filter }}",{% endif %}{% if import_filter %}"import_id":"{{ import_filter }}",{% endif %}{% if stage_filter %}"stage":"{{ stage_filter }}",{% endif %}"attach_report":"0" }'
+            hx-swap="none">Email all filtered</button>
+    <button class="btn btn-secondary btn-sm"
             hx-post="/api/enrich/batch"
             {% if campaign_filter %}hx-vals='{"campaign_id":"{{ campaign_filter }}"}'{% endif %}
             hx-target="#enrich-progress"
@@ -179,9 +183,8 @@ document.body.addEventListener('htmx:afterRequest', function(e) {
     if (countEl) countEl.textContent = remaining + ' total';
     document.getElementById('bulk-bar').style.display = 'none';
   }
-  if (e.detail.elt && (e.detail.elt.id === 'bulk-email-form' || e.detail.elt.id === 'bulk-email-report-form' || e.detail.elt.id === 'bulk-sms-form')) {
-    var xhr = e.detail.xhr;
-    var redirect = xhr.getResponseHeader('HX-Redirect');
+  if (e.detail.xhr) {
+    var redirect = e.detail.xhr.getResponseHeader('HX-Redirect');
     if (redirect) window.location.href = redirect;
   }
 });

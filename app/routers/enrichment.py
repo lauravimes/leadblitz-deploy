@@ -117,42 +117,62 @@ def _batch_enrich_worker(lead_ids: list[str], user_id: int, batch_id: str):
     CHUNK_SIZE = 50
 
     def _enrich_single(lid: str):
+        # Step 1: brief DB read to get website
         db = SessionLocal()
         try:
             lead = db.query(Lead).filter(Lead.id == lid, Lead.user_id == user_id).first()
             if not lead:
                 status["skipped"] += 1
                 return
-            if not lead.website:
+            website = lead.website
+            if not website:
                 lead.email_source = "no_website"
                 db.commit()
                 status["skipped"] += 1
                 return
+        except Exception as e:
+            logger.error(f"Batch enrich read error for lead {lid}: {e}")
+            status["failed"] += 1
+            return
+        finally:
+            db.close()
 
-            emails = extract_emails_from_website(lead.website, timeout=8)
+        # Step 2: scrape website (no DB connection held)
+        try:
+            emails = extract_emails_from_website(website, timeout=8)
             best = choose_best_email(emails)
+        except Exception as e:
+            logger.error(f"Batch enrich scrape error for lead {lid}: {e}")
+            status["failed"] += 1
+            return
+
+        # Step 3: brief DB write to save result
+        db = SessionLocal()
+        try:
+            lead = db.query(Lead).filter(Lead.id == lid, Lead.user_id == user_id).first()
+            if not lead:
+                return
             if best:
                 lead.email = best
                 lead.email_source = "website"
                 lead.email_candidates = emails
+                status["found"] += 1
             else:
                 lead.email_source = "scraped_none"
                 status["not_found"] += 1
             db.commit()
-            if best:
-                status["found"] += 1
             status["recently_enriched_ids"].append(str(lid))
         except Exception as e:
-            logger.error(f"Batch enrich error for lead {lid}: {e}")
+            logger.error(f"Batch enrich write error for lead {lid}: {e}")
             status["failed"] += 1
         finally:
             db.close()
 
     try:
-        # Process in chunks to avoid memory issues with large batches
+        # Process in chunks with reduced concurrency to avoid exhausting the DB pool
         for i in range(0, len(lead_ids), CHUNK_SIZE):
             chunk = lead_ids[i:i + CHUNK_SIZE]
-            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
                 futures = [executor.submit(_enrich_single, lid) for lid in chunk]
                 for future in concurrent.futures.as_completed(futures, timeout=300):
                     try:

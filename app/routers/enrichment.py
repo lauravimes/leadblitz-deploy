@@ -139,7 +139,7 @@ def _batch_enrich_worker(lead_ids: list[str], user_id: int, batch_id: str):
 
         # Step 2: scrape website (no DB connection held)
         try:
-            emails = extract_emails_from_website(website, timeout=8)
+            emails = extract_emails_from_website(website, timeout=5)
             best = choose_best_email(emails)
         except Exception as e:
             logger.error(f"Batch enrich scrape error for lead {lid}: {e}")

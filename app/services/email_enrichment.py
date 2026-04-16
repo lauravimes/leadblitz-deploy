@@ -36,9 +36,7 @@ INVALID_DOMAINS = [
 ]
 GENERIC_PREFIXES = ["info", "contact", "hello", "support", "sales", "admin", "enquiries", "mail", "office"]
 CONTACT_PAGE_PATHS = [
-    "/contact", "/contact-us", "/about", "/about-us",
-    "/get-in-touch", "/enquiries", "/team", "/our-team",
-    "/support", "/help", "/connect",
+    "/contact", "/contact-us", "/about",
 ]
 
 HEADERS = {
@@ -132,26 +130,35 @@ def _filter_emails(emails: set) -> List[str]:
     return list(set(filtered))
 
 
-def extract_emails_from_website(website: str, timeout: int = 10) -> List[str]:
+def extract_emails_from_website(website: str, timeout: int = 5) -> List[str]:
     if not website:
         return []
     try:
         if not website.startswith(("http://", "https://")):
             website = f"https://{website}"
-        pages = [website] + [urljoin(website, p) for p in CONTACT_PAGE_PATHS]
-        all_html = []
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            futures = {executor.submit(_fetch_page, url, timeout): url for url in pages}
-            for future in as_completed(futures, timeout=timeout * 2):
-                try:
-                    _, html = future.result(timeout=timeout + 5)
-                    if html:
-                        all_html.append(html)
-                except Exception:
-                    continue
+
+        # Try homepage first — many sites have email right there
+        _, home_html = _fetch_page(website, timeout=timeout)
+        if home_html:
+            home_emails = _filter_emails(_extract_emails_from_html(home_html))
+            if home_emails:
+                return home_emails
+
+        # Fallback: try a few common contact pages in parallel
+        pages = [urljoin(website, p) for p in CONTACT_PAGE_PATHS]
         all_emails = set()
-        for html in all_html:
-            all_emails.update(_extract_emails_from_html(html))
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {executor.submit(_fetch_page, url, timeout): url for url in pages}
+            try:
+                for future in as_completed(futures, timeout=timeout * 2):
+                    try:
+                        _, html = future.result(timeout=timeout)
+                        if html:
+                            all_emails.update(_extract_emails_from_html(html))
+                    except Exception:
+                        continue
+            except Exception:
+                pass
         return _filter_emails(all_emails)
     except Exception as e:
         logger.error(f"Error extracting emails from {website}: {e}")

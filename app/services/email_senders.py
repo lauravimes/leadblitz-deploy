@@ -135,19 +135,23 @@ def send_via_smtp(settings: EmailSettingsModel, to_email: str, subject: str, htm
 
     import socket as _socket
     old_timeout = _socket.getdefaulttimeout()
-    _socket.setdefaulttimeout(5)
+    _socket.setdefaulttimeout(15)
     try:
         if settings.smtp_use_tls:
-            server = smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=5)
+            server = smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15)
             server.starttls()
         else:
-            server = smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=5)
+            server = smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=15)
         server.login(settings.smtp_username, smtp_password)
         server.send_message(message)
         server.quit()
         return {"success": True, "provider": "smtp"}
     except (TimeoutError, _socket.timeout, OSError) as e:
-        raise EmailProviderError(f"SMTP connection timed out: {e}")
+        raise EmailProviderError(
+            f"SMTP connection timed out: {e}. "
+            "Check your SMTP host, port, and TLS settings. "
+            "Try the 'Send test email' button in Settings to verify your config."
+        )
     except Exception as e:
         raise EmailProviderError(f"SMTP error: {e}")
     finally:
@@ -271,10 +275,10 @@ def send_email_with_attachments_for_user(
         message = _build_mime_with_attachment(
             settings.smtp_from_email, to_email, subject, html_body, attachments)
         if settings.smtp_use_tls:
-            server = smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=5)
+            server = smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15)
             server.starttls()
         else:
-            server = smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=5)
+            server = smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=15)
         server.login(settings.smtp_username, smtp_password)
         server.send_message(message)
         server.quit()

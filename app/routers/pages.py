@@ -402,10 +402,12 @@ def payment_cancel_page(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/settings")
 def settings_page(request: Request, db: Session = Depends(get_db)):
+    from app.models import EmailSettings as EmailSettingsModel
     user = get_current_user(request, db)
+    email_settings = db.query(EmailSettingsModel).filter_by(user_id=user.id).first()
     return _tpl(request).TemplateResponse(
         "pages/settings.html",
-        {"request": request, "user": user, "active_page": "settings"},
+        {"request": request, "user": user, "active_page": "settings", "email_settings": email_settings},
     )
 
 

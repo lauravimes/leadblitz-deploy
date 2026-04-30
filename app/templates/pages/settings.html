@@ -76,6 +76,25 @@
 
 <!-- Email Provider Tab -->
 <div id="tab-email-provider" class="tab-content" style="display:none">
+  {% if email_settings and email_settings.provider != 'none' %}
+  <div class="card" style="margin-bottom:16px">
+    <h2>Current provider</h2>
+    <div style="margin-top:8px;font-size:.93rem">
+      {% if email_settings.provider == 'smtp' %}
+        <strong>SMTP</strong> — {{ email_settings.smtp_host }}:{{ email_settings.smtp_port }} (from: {{ email_settings.smtp_from_email }})
+      {% elif email_settings.provider == 'sendgrid' %}
+        <strong>SendGrid</strong> — from: {{ email_settings.sendgrid_from_email }}
+      {% elif email_settings.provider == 'gmail' %}
+        <strong>Gmail (OAuth)</strong> — {{ email_settings.gmail_email_address }}
+      {% elif email_settings.provider == 'outlook' %}
+        <strong>Outlook</strong> — {{ email_settings.outlook_email_address }}
+      {% else %}
+        <strong>{{ email_settings.provider }}</strong>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
   <div class="card">
     <h2>Connect Gmail</h2>
     <p class="subtext" style="margin-bottom:16px">Send emails from your Gmail account. Uses an app password — your credentials are encrypted and never shared.</p>

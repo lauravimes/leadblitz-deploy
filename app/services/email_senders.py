@@ -178,7 +178,13 @@ def send_via_sendgrid(settings: EmailSettingsModel, to_email: str, subject: str,
     return {"success": True, "provider": "sendgrid"}
 
 
+def _nl2br(text: str) -> str:
+    """Convert plain-text newlines to HTML <br> tags for email rendering."""
+    return text.replace("\r\n", "\n").replace("\n", "<br>\n")
+
+
 def send_email_for_user(db: Session, user_id: int, to_email: str, subject: str, html_body: str) -> dict:
+    html_body = _nl2br(html_body)
     settings = get_email_settings(db, user_id)
     if not settings or settings.provider == "none":
         raise EmailProviderError("No email provider configured. Please set up an email provider in Settings.")
@@ -223,6 +229,7 @@ def send_email_with_attachments_for_user(
 
     Each entry in *attachments* is a (bytes, filename, mime_type) tuple.
     """
+    html_body = _nl2br(html_body)
     settings = get_email_settings(db, user_id)
     if not settings or settings.provider == "none":
         raise EmailProviderError("No email provider configured.")

@@ -42,6 +42,9 @@
 
 <div id="admin-flash" style="margin-bottom:16px"></div>
 
+<!-- User detail panel (loaded via HTMX when clicking a user) -->
+<div id="user-detail-panel" style="margin-bottom:16px"></div>
+
 <div class="card">
   <h2>Users</h2>
   <div id="user-list" hx-get="/api/admin/users" hx-trigger="load" hx-swap="innerHTML" style="margin-top:12px">

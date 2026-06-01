@@ -1,9 +1,11 @@
 import secrets
 from datetime import datetime, timezone, timedelta
+from typing import Optional
 
 from fastapi import APIRouter, Request, Response, Depends, Form
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from app.deps import get_db, get_current_user
 from app.models import User
@@ -12,6 +14,47 @@ from app.auth.sessions import create_token
 from app.services.system_email import send_system_email, build_branded_email
 
 router = APIRouter(tags=["auth"])
+
+# Domains where multiple signups are expected (free email providers)
+PUBLIC_EMAIL_DOMAINS = {
+    "gmail.com", "googlemail.com", "hotmail.com", "outlook.com", "live.com",
+    "yahoo.com", "yahoo.co.uk", "icloud.com", "me.com", "aol.com",
+    "protonmail.com", "proton.me", "mail.com", "zoho.com", "yandex.com",
+    "gmx.com", "gmx.net", "fastmail.com", "tutanota.com", "hey.com",
+}
+
+
+def _should_grant_free_credits(db: Session, email: str, ip: Optional[str]) -> bool:
+    """Check whether a new signup should receive free trial credits.
+
+    Returns False if:
+    - A non-public email domain already has an existing account (domain dedup)
+    - The same IP registered another account in the last 30 days (IP dedup)
+    """
+    domain = email.rsplit("@", 1)[-1].lower()
+
+    # Layer 1: email domain dedup (skip for public providers)
+    if domain not in PUBLIC_EMAIL_DOMAINS:
+        existing = (
+            db.query(User.id)
+            .filter(func.lower(User.email).like(f"%@{domain}"))
+            .first()
+        )
+        if existing:
+            return False
+
+    # Layer 2: IP dedup (same IP signed up in last 30 days)
+    if ip:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+        same_ip = (
+            db.query(User.id)
+            .filter(User.signup_ip == ip, User.created_at >= cutoff)
+            .first()
+        )
+        if same_ip:
+            return False
+
+    return True
 
 
 def _set_session(response: Response, user: User) -> Response:
@@ -66,21 +109,28 @@ def register(
             {"request": request, "message": "Password must be at least 8 characters"},
         )
 
+    client_ip = request.client.host if request.client else None
+
     user = User(
         email=email_clean,
         password_hash=hash_password(password),
         full_name=full_name.strip(),
+        signup_ip=client_ip,
     )
     db.add(user)
     db.commit()
     db.refresh(user)
 
-    # Give 200 free trial credits
+    # Give 200 free trial credits — unless abuse detected
     from app.services.credits import credit_manager
-    credit_manager.add_credits(db, user.id, 200, "Free trial credits")
+    if _should_grant_free_credits(db, email_clean, client_ip):
+        credit_manager.add_credits(db, user.id, 200, "Free trial credits")
+        response = Response(status_code=200)
+        response.headers["HX-Redirect"] = "/search"
+    else:
+        response = Response(status_code=200)
+        response.headers["HX-Redirect"] = "/credits"
 
-    response = Response(status_code=200)
-    response.headers["HX-Redirect"] = "/search"
     return _set_session(response, user)
 
 

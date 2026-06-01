@@ -29,6 +29,7 @@ class User(Base):
     is_admin = Column(Boolean, default=False)
     reset_token = Column(String(255), nullable=True)
     reset_token_expiry = Column(DateTime(timezone=True), nullable=True)
+    signup_ip = Column(String(45), nullable=True)
     completed_tutorial = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=_utcnow)
 

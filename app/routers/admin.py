@@ -4,9 +4,10 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Request, Depends, Form, HTTPException
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from app.deps import get_db, get_current_user
-from app.models import User, UserCredits, CreditTransaction, Lead
+from app.models import User, UserCredits, CreditTransaction, Lead, Campaign, Payment
 from app.services.credits import credit_manager
 
 logger = logging.getLogger(__name__)
@@ -27,13 +28,24 @@ def list_users(request: Request, db: Session = Depends(get_db)):
     rows = []
     for u in users:
         credits = db.query(UserCredits).filter(UserCredits.user_id == u.id).first()
+        lead_count = db.query(func.count(Lead.id)).filter(Lead.user_id == u.id).scalar() or 0
+        total_spent = (
+            db.query(func.coalesce(func.sum(Payment.amount_cents), 0))
+            .filter(Payment.user_id == u.id, Payment.status == "completed")
+            .scalar()
+        )
+        domain = u.email.rsplit("@", 1)[-1] if "@" in u.email else ""
         rows.append({
             "id": u.id,
             "email": u.email,
             "name": u.full_name,
+            "domain": domain,
             "is_admin": u.is_admin,
             "created_at": u.created_at,
             "balance": credits.balance if credits else 0,
+            "signup_ip": u.signup_ip or "—",
+            "lead_count": lead_count,
+            "total_spent_cents": total_spent,
         })
 
     templates = request.app.state.templates
@@ -148,3 +160,85 @@ def backfill_emailed(
     db.commit()
 
     return HTMLResponse(f'<span class="saved-flash">Backfilled {count} leads as emailed</span>')
+
+
+@router.get("/api/admin/users/{user_id}")
+def user_detail(user_id: int, request: Request, db: Session = Depends(get_db)):
+    """Expanded user detail panel — loaded via HTMX into admin page."""
+    user = get_current_user(request, db)
+    _check_admin(user)
+
+    target = db.query(User).filter(User.id == user_id).first()
+    if not target:
+        return HTMLResponse('<div class="error-msg">User not found</div>')
+
+    credits = db.query(UserCredits).filter(UserCredits.user_id == user_id).first()
+
+    # Activity stats
+    lead_count = db.query(func.count(Lead.id)).filter(Lead.user_id == user_id).scalar() or 0
+    scored_count = (
+        db.query(func.count(Lead.id))
+        .filter(Lead.user_id == user_id, Lead.score.isnot(None))
+        .scalar()
+    ) or 0
+    emailed_count = (
+        db.query(func.count(Lead.id))
+        .filter(Lead.user_id == user_id, Lead.emails_sent_count > 0)
+        .scalar()
+    ) or 0
+    campaign_count = db.query(func.count(Campaign.id)).filter(Campaign.user_id == user_id).scalar() or 0
+
+    # Purchases
+    payments = (
+        db.query(Payment)
+        .filter(Payment.user_id == user_id, Payment.status == "completed")
+        .order_by(Payment.created_at.desc())
+        .limit(20)
+        .all()
+    )
+
+    # Credit transactions (last 20)
+    transactions = (
+        db.query(CreditTransaction)
+        .filter(CreditTransaction.user_id == user_id)
+        .order_by(CreditTransaction.created_at.desc())
+        .limit(20)
+        .all()
+    )
+
+    # Find other accounts sharing this IP
+    linked_accounts = []
+    if target.signup_ip:
+        linked = (
+            db.query(User)
+            .filter(User.signup_ip == target.signup_ip, User.id != user_id)
+            .all()
+        )
+        for la in linked:
+            la_credits = db.query(UserCredits).filter(UserCredits.user_id == la.id).first()
+            linked_accounts.append({
+                "id": la.id,
+                "email": la.email,
+                "created_at": la.created_at,
+                "balance": la_credits.balance if la_credits else 0,
+            })
+
+    domain = target.email.rsplit("@", 1)[-1] if "@" in target.email else ""
+
+    templates = request.app.state.templates
+    return templates.TemplateResponse(
+        "partials/admin_user_detail.html",
+        {
+            "request": request,
+            "target": target,
+            "domain": domain,
+            "credits": credits,
+            "lead_count": lead_count,
+            "scored_count": scored_count,
+            "emailed_count": emailed_count,
+            "campaign_count": campaign_count,
+            "payments": payments,
+            "transactions": transactions,
+            "linked_accounts": linked_accounts,
+        },
+    )

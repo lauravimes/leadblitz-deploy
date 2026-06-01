@@ -1,22 +1,35 @@
 {% if users %}
 <div class="admin-table">
   {% for u in users %}
-  <div class="admin-row">
+  <div class="admin-row" style="cursor:pointer;flex-wrap:wrap"
+       hx-get="/api/admin/users/{{ u.id }}"
+       hx-target="#user-detail-panel"
+       hx-swap="innerHTML">
     <div style="flex:1;min-width:0">
       <div style="font-weight:600">{{ u.email }}</div>
       <div class="subtext">
         ID: {{ u.id }}
         {% if u.name %}&middot; {{ u.name }}{% endif %}
         &middot; {{ u.balance }} credits
+        &middot; {{ u.lead_count }} leads
+        {% if u.total_spent_cents > 0 %}
+          &middot; <span style="color:var(--green)">${{ "%.2f"|format(u.total_spent_cents / 100) }} spent</span>
+        {% endif %}
         {% if u.is_admin %}<span class="stage stage-qualified">admin</span>{% endif %}
       </div>
+      <div class="subtext" style="margin-top:2px">
+        <span style="font-family:var(--mono);font-size:.78rem">{{ u.signup_ip }}</span>
+        &middot; <span style="color:var(--muted)">{{ u.domain }}</span>
+        &middot; {{ u.created_at.strftime('%d %b %Y') if u.created_at else '—' }}
+      </div>
     </div>
-    <div style="display:flex;gap:8px;align-items:center">
+    <div style="display:flex;gap:8px;align-items:center" onclick="event.stopPropagation()">
       <button class="btn btn-secondary btn-sm"
               hx-post="/api/admin/toggle-admin"
               hx-vals='{"user_id":"{{ u.id }}"}'
-              hx-target="closest .admin-row"
-              hx-swap="afterend">{{ 'Remove admin' if u.is_admin else 'Make admin' }}</button>
+              hx-target="#admin-flash"
+              hx-swap="innerHTML"
+              hx-on::after-request="refreshAdmin()">{{ 'Remove admin' if u.is_admin else 'Make admin' }}</button>
     </div>
   </div>
   {% endfor %}

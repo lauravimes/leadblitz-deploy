@@ -1,0 +1,121 @@
+<div class="card" style="border-left:3px solid var(--accent)">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+    <div>
+      <h2 style="margin-bottom:2px">{{ target.email }}</h2>
+      <div class="subtext">
+        ID: {{ target.id }}
+        {% if target.full_name %}&middot; {{ target.full_name }}{% endif %}
+        &middot; Joined {{ target.created_at.strftime('%d %b %Y %H:%M') if target.created_at else '—' }}
+        {% if target.is_admin %}<span class="stage stage-qualified">admin</span>{% endif %}
+      </div>
+    </div>
+    <button class="btn btn-secondary btn-sm" onclick="document.getElementById('user-detail-panel').innerHTML=''">Close</button>
+  </div>
+
+  <!-- IP & Domain -->
+  <div style="margin-top:16px;padding:12px;background:#f8f8f8;border-radius:var(--radius)">
+    <div style="display:flex;gap:24px;flex-wrap:wrap;font-size:.87rem">
+      <div>
+        <span class="label">Signup IP</span><br>
+        <span style="font-family:var(--mono)">{{ target.signup_ip or '—' }}</span>
+      </div>
+      <div>
+        <span class="label">Domain</span><br>
+        {{ domain }}
+      </div>
+      <div>
+        <span class="label">Credits</span><br>
+        {{ credits.balance if credits else 0 }}
+        <span class="subtext">({{ credits.total_used if credits else 0 }} used)</span>
+      </div>
+    </div>
+  </div>
+
+  {% if linked_accounts %}
+  <!-- Linked accounts (same IP) -->
+  <div style="margin-top:12px;padding:12px;background:#fee2e2;border-radius:var(--radius)">
+    <div style="font-weight:600;font-size:.87rem;color:var(--red);margin-bottom:8px">
+      Linked accounts (same IP)
+    </div>
+    {% for la in linked_accounts %}
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:.87rem;border-bottom:1px solid rgba(0,0,0,.06)">
+      <span>
+        <strong>{{ la.email }}</strong>
+        <span class="subtext">&middot; ID {{ la.id }} &middot; {{ la.created_at.strftime('%d %b %Y') if la.created_at else '—' }}</span>
+      </span>
+      <span>{{ la.balance }} credits</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- Activity -->
+  <div style="margin-top:16px">
+    <h3 style="margin-bottom:8px">Activity</h3>
+    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
+      <div class="card card-compact" style="text-align:center;margin-bottom:0">
+        <div style="font-size:1.3rem;font-weight:700">{{ campaign_count }}</div>
+        <div class="subtext">Campaigns</div>
+      </div>
+      <div class="card card-compact" style="text-align:center;margin-bottom:0">
+        <div style="font-size:1.3rem;font-weight:700">{{ lead_count }}</div>
+        <div class="subtext">Leads</div>
+      </div>
+      <div class="card card-compact" style="text-align:center;margin-bottom:0">
+        <div style="font-size:1.3rem;font-weight:700">{{ scored_count }}</div>
+        <div class="subtext">Scored</div>
+      </div>
+      <div class="card card-compact" style="text-align:center;margin-bottom:0">
+        <div style="font-size:1.3rem;font-weight:700">{{ emailed_count }}</div>
+        <div class="subtext">Emailed</div>
+      </div>
+    </div>
+  </div>
+
+  {% if payments %}
+  <!-- Purchases -->
+  <div style="margin-top:16px">
+    <h3 style="margin-bottom:8px">Purchases</h3>
+    <table class="costs-table">
+      <thead>
+        <tr><th>Date</th><th>Plan</th><th>Credits</th><th>Amount</th></tr>
+      </thead>
+      <tbody>
+        {% for p in payments %}
+        <tr>
+          <td>{{ p.created_at.strftime('%d %b %Y') if p.created_at else '—' }}</td>
+          <td>{{ p.plan_name }}</td>
+          <td>{{ p.credits_purchased }}</td>
+          <td>${{ "%.2f"|format(p.amount_cents / 100) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if transactions %}
+  <!-- Credit history -->
+  <div style="margin-top:16px">
+    <h3 style="margin-bottom:8px">Credit History (last 20)</h3>
+    <table class="costs-table">
+      <thead>
+        <tr><th>Date</th><th>Type</th><th>Amount</th><th>Balance</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        {% for t in transactions %}
+        <tr>
+          <td style="white-space:nowrap">{{ t.created_at.strftime('%d %b %H:%M') if t.created_at else '—' }}</td>
+          <td><span class="stage {% if t.transaction_type == 'purchase' %}stage-qualified{% elif t.transaction_type == 'usage' %}stage-new{% else %}stage-reviewing{% endif %}">{{ t.transaction_type }}</span></td>
+          <td style="font-family:var(--mono);{% if t.amount > 0 %}color:var(--green){% elif t.amount < 0 %}color:var(--red){% endif %}">
+            {{ '+' if t.amount > 0 else '' }}{{ t.amount }}
+          </td>
+          <td style="font-family:var(--mono)">{{ t.balance_after }}</td>
+          <td class="subtext" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ t.description }}">{{ t.description }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>

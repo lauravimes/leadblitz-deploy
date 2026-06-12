@@ -24,7 +24,7 @@ PUBLIC_EMAIL_DOMAINS = {
 }
 
 
-def _should_grant_free_credits(db: Session, email: str, ip: Optional[str]) -> bool:
+def _should_grant_free_credits(db: Session, email: str, ip: Optional[str], exclude_user_id: int = None) -> bool:
     """Check whether a new signup should receive free trial credits.
 
     Returns False if:
@@ -35,23 +35,22 @@ def _should_grant_free_credits(db: Session, email: str, ip: Optional[str]) -> bo
 
     # Layer 1: email domain dedup (skip for public providers)
     if domain not in PUBLIC_EMAIL_DOMAINS:
-        existing = (
-            db.query(User.id)
-            .filter(func.lower(User.email).like(f"%@{domain}"))
-            .first()
-        )
-        if existing:
+        q = db.query(User.id).filter(func.lower(User.email).like(f"%@{domain}"))
+        if exclude_user_id:
+            q = q.filter(User.id != exclude_user_id)
+        if q.first():
             return False
 
     # Layer 2: IP dedup (same IP signed up in last 30 days)
     if ip:
         cutoff = datetime.now(timezone.utc) - timedelta(days=30)
-        same_ip = (
+        q = (
             db.query(User.id)
             .filter(User.signup_ip == ip, User.created_at >= cutoff)
-            .first()
         )
-        if same_ip:
+        if exclude_user_id:
+            q = q.filter(User.id != exclude_user_id)
+        if q.first():
             return False
 
     return True
@@ -123,7 +122,7 @@ def register(
 
     # Give 200 free trial credits — unless abuse detected
     from app.services.credits import credit_manager
-    if _should_grant_free_credits(db, email_clean, client_ip):
+    if _should_grant_free_credits(db, email_clean, client_ip, exclude_user_id=user.id):
         credit_manager.add_credits(db, user.id, 200, "Free trial credits")
         response = Response(status_code=200)
         response.headers["HX-Redirect"] = "/search"

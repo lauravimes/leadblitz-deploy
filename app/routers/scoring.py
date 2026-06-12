@@ -1,7 +1,11 @@
 import logging
 import threading
+import time
 import uuid
 from datetime import datetime, timezone
+
+_CACHE_TTL = 3600
+_CACHE_MAX = 200
 
 from fastapi import APIRouter, Request, Depends, Form
 from fastapi.responses import HTMLResponse
@@ -18,6 +22,15 @@ router = APIRouter(tags=["scoring"])
 
 # In-memory batch status tracker
 _batch_status: dict[str, dict] = {}
+
+
+def _evict_old_status():
+    now = time.time()
+    stale = [k for k, v in _batch_status.items() if now - v.get("_created", 0) > _CACHE_TTL]
+    for k in stale:
+        _batch_status.pop(k, None)
+    while len(_batch_status) > _CACHE_MAX:
+        _batch_status.pop(next(iter(_batch_status)), None)
 
 
 def _batch_score_worker(lead_ids: list[str], user_id: int, batch_id: str):
@@ -84,6 +97,7 @@ def batch_score(
         return HTMLResponse('<span class="subtext">No unscored leads found.</span>')
 
     batch_id = str(uuid.uuid4())[:8]
+    _evict_old_status()
     _batch_status[batch_id] = {
         "status": "in_progress",
         "total": len(leads),
@@ -92,6 +106,7 @@ def batch_score(
         "skipped": 0,
         "recently_scored_ids": [],
         "user_id": user.id,
+        "_created": time.time(),
     }
 
     lead_ids = [l.id for l in leads]

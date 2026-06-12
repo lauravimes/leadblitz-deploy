@@ -30,6 +30,9 @@ def _check_rate_limit(ip: str) -> bool:
     timestamps = _rate_limits[ip]
     # Prune old entries
     _rate_limits[ip] = [t for t in timestamps if now - t < RATE_WINDOW]
+    if not _rate_limits[ip]:
+        del _rate_limits[ip]
+        _rate_limits[ip] = []
     if len(_rate_limits[ip]) >= RATE_LIMIT:
         return False
     _rate_limits[ip].append(now)

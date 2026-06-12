@@ -4,6 +4,9 @@ import time
 import uuid as _uuid
 from datetime import datetime, timezone
 
+_CACHE_TTL = 3600  # 1 hour
+_CACHE_MAX = 200
+
 from fastapi import APIRouter, Request, Depends, File, Form, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy.orm import Session
@@ -22,6 +25,16 @@ router = APIRouter(tags=["email"])
 
 # In-memory batch send status tracker (mirrors scoring.py pattern)
 _send_status: dict[str, dict] = {}
+
+
+def _evict_old_status():
+    now = time.time()
+    stale = [k for k, v in _send_status.items() if now - v.get("_created", 0) > _CACHE_TTL]
+    for k in stale:
+        _send_status.pop(k, None)
+    # Hard cap
+    while len(_send_status) > _CACHE_MAX:
+        _send_status.pop(next(iter(_send_status)), None)
 
 
 @router.post("/api/email/preview")
@@ -171,6 +184,8 @@ async def send_emails(
     # For large batches or rate-limited sends, use background thread
     if len(leads_with_email) > 3 or send_rate > 0:
         send_id = str(_uuid.uuid4())[:8]
+        # Evict stale entries before adding new one
+        _evict_old_status()
         _send_status[send_id] = {
             "status": "in_progress",
             "total": len(leads),
@@ -180,6 +195,7 @@ async def send_emails(
             "errors": [],
             "send_rate": send_rate,
             "user_id": user.id,
+            "_created": time.time(),
         }
         thread = threading.Thread(
             target=_batch_send_worker,

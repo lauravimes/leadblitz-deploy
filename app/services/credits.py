@@ -13,6 +13,7 @@ CREDIT_COSTS = {
     "sms_send": 0,
     "lead_search": 1,
     "email_personalization": 1,
+    "hunter_enrichment": 2,
 }
 
 

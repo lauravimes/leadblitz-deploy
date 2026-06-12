@@ -1,6 +1,10 @@
 import logging
 import threading
+import time
 import uuid
+
+_CACHE_TTL = 3600
+_CACHE_MAX = 200
 
 from fastapi import APIRouter, Request, Depends, Form
 from fastapi.responses import HTMLResponse
@@ -22,6 +26,15 @@ router = APIRouter(tags=["enrichment"])
 
 # In-memory batch enrichment status tracker
 _enrich_batch_status: dict[str, dict] = {}
+
+
+def _evict_old_status():
+    now = time.time()
+    stale = [k for k, v in _enrich_batch_status.items() if now - v.get("_created", 0) > _CACHE_TTL]
+    for k in stale:
+        _enrich_batch_status.pop(k, None)
+    while len(_enrich_batch_status) > _CACHE_MAX:
+        _enrich_batch_status.pop(next(iter(_enrich_batch_status)), None)
 
 
 @router.post("/api/enrich/website")
@@ -73,7 +86,7 @@ def enrich_hunter(
         return HTMLResponse('<div class="error-msg">No leads selected</div>')
 
     # Check credits (2 per lead for Hunter)
-    has, balance, cost = credit_manager.has_sufficient_credits(db, user.id, "sms_send", len(leads))
+    has, balance, cost = credit_manager.has_sufficient_credits(db, user.id, "hunter_enrichment", len(leads))
     if not has:
         return HTMLResponse(f'<div class="error-msg">Insufficient credits. Need {cost}, have {balance}</div>')
 
@@ -89,7 +102,7 @@ def enrich_hunter(
             continue
 
         hunter_result = enrich_from_hunter(domain, hunter_api_key=hunter_key)
-        credit_manager.deduct_credits(db, user.id, "sms_send", 1, f"Hunter enrichment: {lead.name}")
+        credit_manager.deduct_credits(db, user.id, "hunter_enrichment", 1, f"Hunter enrichment: {lead.name}")
 
         found_emails = hunter_result.get("emails", [])
         if found_emails and not lead.email:
@@ -210,6 +223,7 @@ def batch_enrich(
         return HTMLResponse('<span class="subtext">All leads already have emails (or no website to scrape).</span>')
 
     batch_id = str(uuid.uuid4())[:8]
+    _evict_old_status()
     _enrich_batch_status[batch_id] = {
         "status": "in_progress",
         "total": len(leads),
@@ -219,6 +233,7 @@ def batch_enrich(
         "skipped": 0,
         "recently_enriched_ids": [],
         "user_id": user.id,
+        "_created": time.time(),
     }
 
     lead_ids = [l.id for l in leads]

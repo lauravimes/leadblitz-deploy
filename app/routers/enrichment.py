@@ -218,6 +218,7 @@ def batch_enrich(
         "failed": 0,
         "skipped": 0,
         "recently_enriched_ids": [],
+        "user_id": user.id,
     }
 
     lead_ids = [l.id for l in leads]
@@ -240,7 +241,7 @@ def batch_enrich_status(batch_id: str, request: Request, db: Session = Depends(g
     templates = request.app.state.templates
 
     status = _enrich_batch_status.get(batch_id)
-    if not status:
+    if not status or status.get("user_id") != user.id:
         return HTMLResponse('<span class="subtext">Batch not found.</span>')
 
     # Pop recently enriched lead IDs and render updated cards as OOB swaps

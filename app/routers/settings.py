@@ -180,6 +180,16 @@ def gmail_oauth_url(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/api/settings/email/gmail/callback")
 def gmail_callback(request: Request, code: str = "", state: str = "", db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+
+    # Verify state matches logged-in user to prevent IDOR
+    try:
+        state_user_id = int(state)
+    except (ValueError, TypeError):
+        return RedirectResponse("/settings?error=gmail_failed")
+    if state_user_id != user.id:
+        return RedirectResponse("/settings?error=gmail_failed")
+
     s = get_settings()
     base_url = str(request.base_url).rstrip("/")
 
@@ -194,16 +204,15 @@ def gmail_callback(request: Request, code: str = "", state: str = "", db: Sessio
         return RedirectResponse("/settings?error=gmail_failed")
 
     data = resp.json()
-    user_id = int(state)
 
     # Get email address
     info_resp = requests.get("https://www.googleapis.com/oauth2/v2/userinfo",
                              headers={"Authorization": f"Bearer {data['access_token']}"})
     gmail_email = info_resp.json().get("email", "") if info_resp.status_code == 200 else ""
 
-    es = db.query(EmailSettings).filter_by(user_id=user_id).first()
+    es = db.query(EmailSettings).filter_by(user_id=user.id).first()
     if not es:
-        es = EmailSettings(user_id=user_id)
+        es = EmailSettings(user_id=user.id)
         db.add(es)
 
     es.provider = "gmail"
@@ -239,6 +248,16 @@ def outlook_oauth_url(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/api/settings/email/outlook/callback")
 def outlook_callback(request: Request, code: str = "", state: str = "", db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+
+    # Verify state matches logged-in user to prevent IDOR
+    try:
+        state_user_id = int(state)
+    except (ValueError, TypeError):
+        return RedirectResponse("/settings?error=outlook_failed")
+    if state_user_id != user.id:
+        return RedirectResponse("/settings?error=outlook_failed")
+
     s = get_settings()
     base_url = str(request.base_url).rstrip("/")
 
@@ -254,16 +273,15 @@ def outlook_callback(request: Request, code: str = "", state: str = "", db: Sess
         return RedirectResponse("/settings?error=outlook_failed")
 
     data = resp.json()
-    user_id = int(state)
 
     # Get email
     info_resp = requests.get("https://graph.microsoft.com/v1.0/me",
                              headers={"Authorization": f"Bearer {data['access_token']}"})
     outlook_email = info_resp.json().get("mail", "") if info_resp.status_code == 200 else ""
 
-    es = db.query(EmailSettings).filter_by(user_id=user_id).first()
+    es = db.query(EmailSettings).filter_by(user_id=user.id).first()
     if not es:
-        es = EmailSettings(user_id=user_id)
+        es = EmailSettings(user_id=user.id)
         db.add(es)
 
     es.provider = "outlook"

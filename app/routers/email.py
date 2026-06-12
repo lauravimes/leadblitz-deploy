@@ -179,6 +179,7 @@ async def send_emails(
             "skipped": 0,
             "errors": [],
             "send_rate": send_rate,
+            "user_id": user.id,
         }
         thread = threading.Thread(
             target=_batch_send_worker,
@@ -248,11 +249,11 @@ async def send_emails(
 
 @router.get("/api/email/send/{send_id}/status")
 def send_status(send_id: str, request: Request, db: Session = Depends(get_db)):
-    get_current_user(request, db)
+    user = get_current_user(request, db)
     templates = request.app.state.templates
 
     status = _send_status.get(send_id)
-    if not status:
+    if not status or status.get("user_id") != user.id:
         return HTMLResponse('<span class="subtext">Send batch not found.</span>')
 
     return templates.TemplateResponse(

@@ -91,6 +91,7 @@ def batch_score(
         "failed": 0,
         "skipped": 0,
         "recently_scored_ids": [],
+        "user_id": user.id,
     }
 
     lead_ids = [l.id for l in leads]
@@ -113,7 +114,7 @@ def batch_score_status(batch_id: str, request: Request, db: Session = Depends(ge
     templates = request.app.state.templates
 
     status = _batch_status.get(batch_id)
-    if not status:
+    if not status or status.get("user_id") != user.id:
         return HTMLResponse('<span class="subtext">Batch not found.</span>')
 
     # Pop recently scored lead IDs and render their updated cards as OOB swaps

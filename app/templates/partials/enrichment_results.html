@@ -1,12 +1,15 @@
 {% if results %}
   {% for r in results %}
-  <div class="card card-compact" style="display:flex;justify-content:space-between;align-items:center">
+  <div class="card card-compact" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
     <div>
       <span style="font-weight:600">{{ r.lead.name }}</span>
       {% if r.status == 'found' %}
         <span class="stage stage-qualified" style="margin-left:8px">Found</span>
-      {% elif r.status == 'no_website' %}
+      {% elif r.status == 'no_website' or r.status == 'no_domain' %}
         <span class="stage stage-new" style="margin-left:8px">No website</span>
+      {% elif r.status == 'error' %}
+        <span class="stage stage-rejected" style="margin-left:8px">Lookup failed</span>
+        <span class="subtext" style="margin-left:6px">{{ r.error }} — not charged</span>
       {% else %}
         <span class="stage stage-rejected" style="margin-left:8px">Not found</span>
       {% endif %}

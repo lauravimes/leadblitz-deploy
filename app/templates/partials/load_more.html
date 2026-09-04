@@ -1,0 +1,21 @@
+<div id="load-more" {% if oob %}hx-swap-oob="true"{% endif %} style="text-align:center;margin-top:16px">
+  {% if next_page_token %}
+  <button class="btn btn-secondary"
+          hx-post="/api/search/more"
+          hx-target="#lead-list"
+          hx-swap="beforeend"
+          hx-vals='{{ {"campaign_id": campaign_id, "next_page_token": next_page_token} | tojson }}'
+          hx-indicator="#more-indicator"
+          hx-disabled-elt="this">
+    Load more · 1 credit
+  </button>
+  <span id="more-indicator" class="htmx-indicator">Loading...</span>
+  {% if new_count is defined %}
+  <p class="subtext" style="margin-top:8px">{{ new_count }} new lead{{ 's' if new_count != 1 }} added{% if new_count == 0 %} — nothing new on that page, so no credit was charged{% endif %}.</p>
+  {% endif %}
+  {% else %}
+  <p class="subtext">
+    {% if new_count is defined %}{{ new_count }} new lead{{ 's' if new_count != 1 }} added. {% endif %}No more results for this search.
+  </p>
+  {% endif %}
+</div>

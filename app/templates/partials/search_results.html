@@ -3,21 +3,24 @@
     {% for lead in leads %}
       {% include "partials/lead_card.html" %}
     {% endfor %}
+    {% if not leads %}
+    <div class="empty-state">
+      {% if exhausted %}
+      <p>You've already got every result Google has for this search. Try a nearby town or a different business type.</p>
+      {% else %}
+      <p>No new businesses found for this search.</p>
+      {% endif %}
+      <p class="subtext">No credit was charged.</p>
+    </div>
+    {% endif %}
   </div>
 </div>
 
-{% if next_page_token %}
-<div style="text-align:center;margin-top:16px">
-  <button class="btn btn-secondary"
-          hx-post="/api/search/more"
-          hx-target="#lead-list"
-          hx-swap="beforeend"
-          hx-vals='{"campaign_id":"{{ campaign_id }}","next_page_token":"{{ next_page_token }}"}'
-          hx-indicator="#more-indicator">
-    Load more
-  </button>
-  <span id="more-indicator" class="htmx-indicator">Loading...</span>
-</div>
-{% endif %}
+{% include "partials/load_more.html" %}
 
-<p class="subtext" style="margin-top:12px">{{ leads | length }} leads found{% if next_page_token %} — more available{% endif %}</p>
+<p class="subtext" style="margin-top:12px">
+  {{ leads | length }} new lead{{ 's' if leads | length != 1 }}
+  {% if charged %} · 1 credit{% endif %}
+  {% if next_page_token %} · more available{% endif %}
+  {% if leads %} · <a href="/leads?campaign_id={{ campaign_id }}">View all leads in this campaign</a>{% endif %}
+</p>

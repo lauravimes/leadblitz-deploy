@@ -109,32 +109,18 @@ def leads_page(
     page: int = 1,
     db: Session = Depends(get_db),
 ):
+    from app.services.lead_filters import apply_lead_filters
+
     PAGE_SIZE = 50
     search_query = q
     user = get_current_user(request, db)
-    q = db.query(Lead).filter(Lead.user_id == user.id)
-    if stage:
-        q = q.filter(Lead.stage == stage)
-    if campaign_id:
-        q = q.filter(Lead.campaign_id == campaign_id)
-    if import_id:
-        q = q.filter(Lead.import_id == import_id)
-    if scored == "1":
-        q = q.filter(Lead.score.isnot(None))
-    if has_email == "1":
-        q = q.filter(Lead.email.isnot(None))
-    elif has_email == "0":
-        q = q.filter(Lead.email.is_(None))
-    if search_query:
-        pattern = f"%{search_query}%"
-        q = q.filter(
-            Lead.name.ilike(pattern)
-            | Lead.email.ilike(pattern)
-            | Lead.phone.ilike(pattern)
-            | Lead.address.ilike(pattern)
-            | Lead.website.ilike(pattern)
-        )
+    q = apply_lead_filters(
+        db.query(Lead).filter(Lead.user_id == user.id),
+        stage=stage, campaign_id=campaign_id, import_id=import_id,
+        scored=scored, has_email=has_email, search=search_query,
+    )
     total_leads = q.count()
+    unscored_count = q.filter(Lead.score.is_(None), Lead.website != "").count() if total_leads else 0
     total_pages = max(1, (total_leads + PAGE_SIZE - 1) // PAGE_SIZE)
     page = max(1, min(page, total_pages))
     leads = q.order_by(Lead.created_at.desc()).offset((page - 1) * PAGE_SIZE).limit(PAGE_SIZE).all()
@@ -158,6 +144,7 @@ def leads_page(
             "user": user,
             "leads": leads,
             "total_leads": total_leads,
+            "unscored_count": unscored_count,
             "page": page,
             "total_pages": total_pages,
             "campaigns": campaigns,
@@ -228,11 +215,11 @@ def email_page(
 
     # --- Bulk / mail-merge mode ---
     if bulk_token:
-        from app.routers.leads import _bulk_selections
+        from app.routers.leads import get_bulk_selection
 
-        selection = _bulk_selections.pop(bulk_token, None)
-        if not selection or selection["user_id"] != user.id:
-            return RedirectResponse("/leads", status_code=302)
+        selection = get_bulk_selection(bulk_token, user.id)
+        if not selection:
+            return RedirectResponse("/leads?bulk=expired", status_code=302)
 
         bulk_leads = (
             db.query(Lead)
@@ -280,11 +267,11 @@ def sms_page(
 
     # --- Bulk SMS mode ---
     if bulk_token:
-        from app.routers.leads import _bulk_selections
+        from app.routers.leads import get_bulk_selection
 
-        selection = _bulk_selections.pop(bulk_token, None)
-        if not selection or selection["user_id"] != user.id:
-            return RedirectResponse("/leads", status_code=302)
+        selection = get_bulk_selection(bulk_token, user.id)
+        if not selection:
+            return RedirectResponse("/leads?bulk=expired", status_code=302)
 
         bulk_leads = (
             db.query(Lead)

@@ -3,12 +3,14 @@
   <p style="font-weight:600;margin-bottom:8px">{{ message }}</p>
   {% if summary is defined %}
   <div class="subtext">
-    Total rows: {{ summary.total_rows }} &middot;
-    Imported: {{ summary.to_score }} &middot;
+    Rows: {{ summary.total_rows }} &middot;
+    Imported: {{ summary.imported }} &middot;
     Skipped: {{ summary.skipped_duplicate + summary.skipped_empty + summary.skipped_invalid }}
+    {% if summary.skipped_duplicate %}({{ summary.skipped_duplicate }} duplicate{{ 's' if summary.skipped_duplicate != 1 }}){% endif %}
+    {% if summary.skipped_invalid %}({{ summary.skipped_invalid }} invalid URL{{ 's' if summary.skipped_invalid != 1 }}){% endif %}
   </div>
   {% endif %}
-  {% if import_id %}
+  {% if import_id and summary is defined and summary.to_score %}
   <div id="progress-poll"
        hx-get="/api/csv/import/{{ import_id }}/status"
        hx-trigger="every 3s"
@@ -21,27 +23,36 @@
     <span class="subtext">Scoring in progress...</span>
   </div>
   {% endif %}
+  <p class="subtext" style="margin-top:12px"><a href="/leads?import_id={{ import_id }}">View imported leads</a></p>
 </div>
 {% elif status is defined %}
 <div class="card">
   {% set total = status.total or 1 %}
-  {% set done = status.scored + status.unreachable %}
+  {% set done = status.scored + status.unreachable + status.pending_credits %}
   {% set pct = ((done / total) * 100) | int if total > 0 else 0 %}
   <div class="progress-bar-container">
     <div class="progress-bar" style="width:{{ pct }}%"></div>
   </div>
   <div class="subtext" style="margin-top:8px">
-    {{ status.scored }} scored &middot; {{ status.unreachable }} unreachable &middot; {{ status.pending }} pending
-    {% if status.status == 'completed' %}
+    {{ status.scored }} scored &middot; {{ status.unreachable }} unreachable (refunded) &middot; {{ status.pending }} pending
+    {% if status.status in ('completed', 'partial') %}
     <span class="saved-flash" style="margin-left:8px">Complete</span>
     {% endif %}
   </div>
-  {% if status.status != 'completed' %}
+  {% if status.pending_credits %}
+  <div class="error-msg" style="margin-top:8px">
+    {{ status.pending_credits }} lead{{ 's' if status.pending_credits != 1 }} not scored — you ran out of credits.
+    <a href="/credits">Buy credits</a>, then use "Score all unscored" on the Leads page.
+  </div>
+  {% endif %}
+  {% if status.status == 'in_progress' %}
   <div hx-get="/api/csv/import/{{ import_id }}/status"
        hx-trigger="every 3s"
        hx-target="closest .card"
        hx-swap="outerHTML">
   </div>
+  {% else %}
+  <p class="subtext" style="margin-top:8px"><a href="/leads?import_id={{ import_id }}">View imported leads</a></p>
   {% endif %}
 </div>
 {% endif %}

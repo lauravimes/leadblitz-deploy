@@ -99,10 +99,14 @@ Return JSON with:
   "confidence": 0.0
 }}"""
 
+    if not api_key:
+        logger.error("AI scoring skipped: OPENAI_API_KEY not configured")
+        return _ai_failure("OpenAI API key not configured")
+
     try:
-        client = OpenAI(api_key=api_key)
+        client = OpenAI(api_key=api_key, timeout=60.0, max_retries=2)
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model=MODEL,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_content},
@@ -113,39 +117,64 @@ Return JSON with:
 
         result = json.loads(response.choices[0].message.content)
 
-        category_scores = result.get("category_scores", {})
-        clamped = {
-            "brand": max(0, min(12, category_scores.get("brand", 0))),
-            "visual": max(0, min(10, category_scores.get("visual", 0))),
-            "conversion": max(0, min(12, category_scores.get("conversion", 0))),
-            "trust": max(0, min(10, category_scores.get("trust", 0))),
-            "a11y": max(0, min(6, category_scores.get("a11y", 0))),
-        }
+        category_scores = result.get("category_scores", {}) or {}
+        clamped = {k: _clamp(category_scores.get(k, 0), hi) for k, hi in CATEGORY_MAX.items()}
 
-        insufficient = result.get("insufficient_evidence", False)
-        confidence = result.get("confidence", 0.7)
+        insufficient = bool(result.get("insufficient_evidence", False))
+        confidence = _to_float(result.get("confidence", 0.7), 0.7)
 
         total_ai = sum(clamped.values())
         if insufficient and total_ai < 20 and heuristic_evidence.get("text_word_count", 0) > 150:
             adj = (20 - total_ai) / 5
-            clamped = {k: int(v + adj) for k, v in clamped.items()}
+            clamped = {k: _clamp(v + adj, CATEGORY_MAX[k]) for k, v in clamped.items()}
+
+        justifications = result.get("justifications", {})
+        if not isinstance(justifications, dict):
+            justifications = {}
+        report = result.get("plain_english_report", {})
+        if not isinstance(report, dict):
+            report = {}
 
         return {
             "category_scores": clamped,
-            "justifications": result.get("justifications", {}),
-            "plain_english_report": result.get("plain_english_report", {}),
+            "justifications": justifications,
+            "plain_english_report": report,
             "insufficient_evidence": insufficient,
             "confidence": max(0.0, min(1.0, confidence)),
+            "ai_failed": False,
         }
 
     except Exception as exc:
         logger.exception("AI scoring failed: %s", exc)
-        return {
-            "category_scores": {"brand": 0, "visual": 0, "conversion": 0, "trust": 0, "a11y": 0},
-            "justifications": {"error": f"AI scoring failed: {str(exc)}"},
-            "insufficient_evidence": True,
-            "confidence": 0.0,
-        }
+        return _ai_failure(str(exc))
+
+
+MODEL = "gpt-4o"
+CATEGORY_MAX = {"brand": 12, "visual": 10, "conversion": 12, "trust": 10, "a11y": 6}
+
+
+def _to_float(value, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _clamp(value, hi: int) -> int:
+    """Coerce model output (may be a string, float or None) to an int in [0, hi]."""
+    return int(max(0, min(hi, _to_float(value, 0))))
+
+
+def _ai_failure(reason: str) -> Dict[str, Any]:
+    """Marker result: callers must NOT persist or cache this."""
+    return {
+        "category_scores": {k: 0 for k in CATEGORY_MAX},
+        "justifications": {"error": f"AI scoring failed: {reason[:200]}"},
+        "plain_english_report": {},
+        "insufficient_evidence": True,
+        "confidence": 0.0,
+        "ai_failed": True,
+    }
 
 
 def combine_scores(heuristic: Dict[str, Any], ai_review: Dict[str, Any]) -> Dict[str, Any]:

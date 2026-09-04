@@ -2,43 +2,44 @@
 {% set done = status.scored + status.failed + status.skipped %}
 {% set pct = ((done / total) * 100) | int if total > 0 else 0 %}
 
-<div class="card card-compact">
+<div class="card card-compact" id="batch-{{ batch_id }}">
   <div class="progress-bar-container">
     <div class="progress-bar" style="width:{{ pct }}%"></div>
   </div>
   <div class="subtext" style="margin-top:8px">
-    {{ status.scored }} scored &middot; {{ status.failed }} failed &middot; {{ status.skipped }} skipped &middot; {{ total - done }} remaining
+    {{ status.scored }} scored &middot; {{ status.failed }} unreachable (refunded) &middot; {{ status.skipped }} skipped &middot; {{ total - done }} remaining
     {% if status.status == 'completed' %}
     <span class="saved-flash" style="margin-left:8px">Complete</span>
     {% endif %}
   </div>
+  {% if status.error %}
+  <div class="error-msg" style="margin-top:8px">{{ status.error }}</div>
+  {% endif %}
   {% if status.status != 'completed' %}
   <div hx-get="/api/score/batch/{{ batch_id }}/status"
        hx-trigger="every 3s"
        hx-target="closest .card"
        hx-swap="outerHTML">
   </div>
+  {% endif %}
+  {% if lead_ids %}
   <script>
   (function(){
-    document.querySelectorAll('.lead-actions .btn').forEach(function(btn) {
-      if (btn.textContent.trim() === 'Score') {
-        var indicator = btn.nextElementSibling;
-        var badge = document.createElement('span');
-        badge.className = 'stage stage-queued';
-        badge.textContent = 'Queued';
-        btn.parentNode.replaceChild(badge, btn);
-        if (indicator && indicator.classList.contains('htmx-indicator')) indicator.remove();
-      }
+    // Mark only the leads in this batch as queued.
+    var ids = {{ lead_ids | tojson }};
+    ids.forEach(function(id){
+      var card = document.getElementById('lead-' + id);
+      if (!card) return;
+      var btn = card.querySelector('.score-btn');
+      if (!btn) return;
+      var badge = document.createElement('span');
+      badge.className = 'stage stage-queued';
+      badge.textContent = 'Queued';
+      btn.parentNode.replaceChild(badge, btn);
+      var ind = card.querySelector('.htmx-indicator');
+      if (ind) ind.remove();
     });
   })();
-  </script>
-  {% else %}
-  <script>
-  // Remove any remaining "Queued" badges for leads that were scored
-  document.querySelectorAll('.stage-queued').forEach(function(badge) {
-    var card = badge.closest('.lead-card');
-    if (card && card.querySelector('.score')) badge.remove();
-  });
   </script>
   {% endif %}
 </div>

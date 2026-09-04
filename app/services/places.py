@@ -12,6 +12,10 @@ logger = logging.getLogger(__name__)
 BASE_URL = "https://maps.googleapis.com/maps/api/place"
 
 
+class PageTokenExpired(ValueError):
+    """The next_page_token is no longer valid; the caller should restart the search."""
+
+
 def search_places(
     api_key: str,
     business_type: str,
@@ -32,9 +36,7 @@ def search_places(
 
     try:
         t0 = time.time()
-        response = requests.get(url, params=params, timeout=15)
-        response.raise_for_status()
-        data = response.json()
+        data = _text_search(url, params, retry_on_invalid=bool(page_token))
 
         status = data.get("status")
         if status == "REQUEST_DENIED":
@@ -43,7 +45,11 @@ def search_places(
             raise ValueError("Google Places API quota exceeded")
         elif status == "ZERO_RESULTS":
             return {"places": [], "next_page_token": None}
-        elif status not in ("OK", "INVALID_REQUEST"):
+        elif status == "INVALID_REQUEST":
+            if page_token:
+                raise PageTokenExpired("That results page has expired — run the search again to continue.")
+            raise ValueError("Google Places rejected the search. Check the business type and location.")
+        elif status != "OK":
             raise ValueError(f"Google Places API status: {status}")
 
         results = data.get("results", [])[:limit]
@@ -72,8 +78,20 @@ def search_places(
         raise ValueError("Google Places API request timed out")
     except requests.exceptions.RequestException as exc:
         raise ValueError(f"Network error: {exc}")
-    except ValueError:
-        raise
+
+
+def _text_search(url: str, params: Dict, retry_on_invalid: bool) -> Dict:
+    """Google needs a short delay before a freshly issued next_page_token becomes
+    valid; an immediate request returns INVALID_REQUEST. Retry once after 2s."""
+    response = requests.get(url, params=params, timeout=15)
+    response.raise_for_status()
+    data = response.json()
+    if data.get("status") == "INVALID_REQUEST" and retry_on_invalid:
+        time.sleep(2)
+        response = requests.get(url, params=params, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+    return data
 
 
 def _get_details(place_id: str, api_key: str) -> Optional[Dict]:
@@ -94,7 +112,9 @@ def _get_details(place_id: str, api_key: str) -> Optional[Dict]:
             "place_id": place_id,
             "name": r.get("name", ""),
             "address": r.get("formatted_address", ""),
-            "phone": r.get("formatted_phone_number") or r.get("international_phone_number", ""),
+            # Prefer E.164-style international format: Twilio needs it and it is
+            # unambiguous across countries.
+            "phone": r.get("international_phone_number") or r.get("formatted_phone_number", ""),
             "website": r.get("website", ""),
             "rating": r.get("rating", 0),
             "review_count": r.get("user_ratings_total", 0),

@@ -26,6 +26,7 @@ router = APIRouter(tags=["enrichment"])
 
 # In-memory batch enrichment status tracker
 _enrich_batch_status: dict[str, dict] = {}
+_status_lock = threading.Lock()
 
 
 def _evict_old_status():
@@ -61,7 +62,9 @@ def enrich_from_website(
             lead.email = best
             lead.email_source = "website"
             lead.email_candidates = emails
-            db.commit()
+        elif not best and not lead.email:
+            lead.email_source = "scraped_none"  # so batch scraping doesn't redo it
+        db.commit()
 
         results.append({"lead": lead, "emails": emails, "best": best, "status": "found" if emails else "none"})
 
@@ -85,16 +88,21 @@ def enrich_hunter(
     if not leads:
         return HTMLResponse('<div class="error-msg">No leads selected</div>')
 
+    # Hunter runs on the user's own key only — never the platform's.
+    keys = db.query(UserAPIKeys).filter_by(user_id=user.id).first()
+    hunter_key = decrypt(keys.hunter_api_key) if keys and keys.hunter_api_key else None
+    if not hunter_key:
+        return HTMLResponse(
+            '<div class="error-msg">Add your Hunter.io API key under Settings → API and SMS Keys to use Hunter lookups.</div>'
+        )
+
     # Check credits (2 per lead for Hunter)
     has, balance, cost = credit_manager.has_sufficient_credits(db, user.id, "hunter_enrichment", len(leads))
     if not has:
         return HTMLResponse(f'<div class="error-msg">Insufficient credits. Need {cost}, have {balance}</div>')
 
-    # Get user's Hunter API key
-    keys = db.query(UserAPIKeys).filter_by(user_id=user.id).first()
-    hunter_key = decrypt(keys.hunter_api_key) if keys and keys.hunter_api_key else None
-
     results = []
+    charged_any = False
     for lead in leads:
         domain = extract_domain(lead.website)
         if not domain:
@@ -102,7 +110,19 @@ def enrich_hunter(
             continue
 
         hunter_result = enrich_from_hunter(domain, hunter_api_key=hunter_key)
-        credit_manager.deduct_credits(db, user.id, "hunter_enrichment", 1, f"Hunter enrichment: {lead.name}")
+        if not hunter_result.get("success"):
+            # Lookup failed (bad key, rate limit, network) — no charge.
+            results.append({"lead": lead, "emails": [], "status": "error",
+                            "error": hunter_result.get("error", "Hunter lookup failed")})
+            if "Invalid Hunter API key" in (hunter_result.get("error") or ""):
+                break
+            continue
+
+        ok, _ = credit_manager.deduct_credits(db, user.id, "hunter_enrichment", 1, f"Hunter enrichment: {lead.name}")
+        if not ok:
+            results.append({"lead": lead, "emails": [], "status": "error", "error": "Out of credits"})
+            break
+        charged_any = True
 
         found_emails = hunter_result.get("emails", [])
         if found_emails and not lead.email:
@@ -115,10 +135,13 @@ def enrich_hunter(
 
         results.append({"lead": lead, "emails": found_emails, "status": "found" if found_emails else "none"})
 
-    return templates.TemplateResponse(
+    response = templates.TemplateResponse(
         "partials/enrichment_results.html",
         {"request": request, "results": results},
     )
+    if charged_any:
+        response.headers["HX-Trigger"] = "creditsChanged"
+    return response
 
 
 def _batch_enrich_worker(lead_ids: list[str], user_id: int, batch_id: str):
@@ -174,7 +197,8 @@ def _batch_enrich_worker(lead_ids: list[str], user_id: int, batch_id: str):
                 lead.email_source = "scraped_none"
                 status["not_found"] += 1
             db.commit()
-            status["recently_enriched_ids"].append(str(lid))
+            with _status_lock:
+                status["recently_enriched_ids"].append(str(lid))
         except Exception as e:
             logger.error(f"Batch enrich write error for lead {lid}: {e}")
             status["failed"] += 1
@@ -203,22 +227,26 @@ def _batch_enrich_worker(lead_ids: list[str], user_id: int, batch_id: str):
 def batch_enrich(
     request: Request,
     campaign_id: str = Form(None),
+    import_id: str = Form(None),
+    stage: str = Form(None),
+    q: str = Form(None),
     db: Session = Depends(get_db),
 ):
+    from app.services.lead_filters import apply_lead_filters
+
     user = get_current_user(request, db)
     templates = request.app.state.templates
 
-    q = db.query(Lead).filter(
+    query = db.query(Lead).filter(
         Lead.user_id == user.id,
-        Lead.email.is_(None),
+        (Lead.email.is_(None)) | (Lead.email == ""),
         Lead.website.isnot(None),
         Lead.website != "",
         Lead.email_source.is_(None),  # skip leads already scraped with no result
     )
-    if campaign_id:
-        q = q.filter(Lead.campaign_id == campaign_id)
+    query = apply_lead_filters(query, stage=stage, campaign_id=campaign_id, import_id=import_id, search=q)
 
-    leads = q.all()
+    leads = query.all()
     if not leads:
         return HTMLResponse('<span class="subtext">All leads already have emails (or no website to scrape).</span>')
 
@@ -260,8 +288,9 @@ def batch_enrich_status(batch_id: str, request: Request, db: Session = Depends(g
         return HTMLResponse('<span class="subtext">Batch not found.</span>')
 
     # Pop recently enriched lead IDs and render updated cards as OOB swaps
-    enriched_ids = status.get("recently_enriched_ids", [])
-    status["recently_enriched_ids"] = []
+    with _status_lock:
+        enriched_ids = status.get("recently_enriched_ids", [])
+        status["recently_enriched_ids"] = []
 
     oob_cards = ""
     if enriched_ids:

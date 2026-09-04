@@ -1,4 +1,5 @@
-import uuid as _uuid
+import secrets
+import time
 
 from fastapi import APIRouter, Request, Depends, Form
 from fastapi.responses import HTMLResponse, Response
@@ -6,13 +7,43 @@ from sqlalchemy.orm import Session
 
 from app.deps import get_db, get_current_user
 from app.models import Lead
+from app.services.lead_filters import apply_lead_filters
 
 router = APIRouter(tags=["leads"])
 
 # Short-lived server-side storage for bulk lead selections.
-# Keyed by 12-char token → {"user_id": int, "lead_ids": list[str], "attach_report": bool}
+# Keyed by token → {"user_id": int, "lead_ids": list[str], "attach_report": bool, "_created": float}
+# Entries are NOT single-use (a page refresh must not lose the selection); they
+# expire after _BULK_TTL seconds instead.
 _bulk_selections: dict[str, dict] = {}
-_BULK_SELECTIONS_MAX = 100
+_BULK_SELECTIONS_MAX = 500
+_BULK_TTL = 3600
+
+
+def store_bulk_selection(user_id: int, lead_ids: list[str], attach_report: bool = False) -> str:
+    now = time.time()
+    for key in [k for k, v in _bulk_selections.items() if now - v.get("_created", 0) > _BULK_TTL]:
+        _bulk_selections.pop(key, None)
+    while len(_bulk_selections) >= _BULK_SELECTIONS_MAX:
+        _bulk_selections.pop(next(iter(_bulk_selections)), None)
+    token = secrets.token_urlsafe(12)
+    _bulk_selections[token] = {
+        "user_id": user_id,
+        "lead_ids": lead_ids,
+        "attach_report": attach_report,
+        "_created": now,
+    }
+    return token
+
+
+def get_bulk_selection(token: str, user_id: int) -> dict | None:
+    sel = _bulk_selections.get(token)
+    if not sel or sel["user_id"] != user_id:
+        return None
+    if time.time() - sel.get("_created", 0) > _BULK_TTL:
+        _bulk_selections.pop(token, None)
+        return None
+    return sel
 
 
 @router.patch("/leads/{lead_id}/stage")
@@ -117,35 +148,27 @@ def email_all_filtered(
     import_id: str = Form(None),
     stage: str = Form(None),
     has_email: str = Form(None),
+    scored: str = Form(None),
+    q: str = Form(None),
     attach_report: str = Form("0"),
     db: Session = Depends(get_db),
 ):
-    """Email all leads matching current filters (not just current page)."""
+    """Email all leads matching the CURRENT filters (not just the current page).
+    Uses the same filter helper as the leads page so the set matches what the
+    user is looking at."""
     user = get_current_user(request, db)
 
-    q = db.query(Lead.id).filter(Lead.user_id == user.id, Lead.email.isnot(None))
-    if campaign_id:
-        q = q.filter(Lead.campaign_id == campaign_id)
-    if import_id:
-        q = q.filter(Lead.import_id == import_id)
-    if stage:
-        q = q.filter(Lead.stage == stage)
+    query = db.query(Lead.id).filter(Lead.user_id == user.id, Lead.email.isnot(None), Lead.email != "")
+    query = apply_lead_filters(
+        query, stage=stage, campaign_id=campaign_id, import_id=import_id,
+        scored=scored, has_email=has_email, search=q,
+    )
 
-    ids = [str(row[0]) for row in q.all()]
+    ids = [str(row[0]) for row in query.all()]
     if not ids:
-        return HTMLResponse('<div class="error-msg">No leads with email match the current filters</div>')
+        return HTMLResponse('<div class="error-msg">No leads with an email address match the current filters</div>')
 
-    while len(_bulk_selections) >= _BULK_SELECTIONS_MAX:
-        oldest_key = next(iter(_bulk_selections))
-        _bulk_selections.pop(oldest_key, None)
-
-    token = str(_uuid.uuid4()).replace("-", "")[:12]
-    _bulk_selections[token] = {
-        "user_id": user.id,
-        "lead_ids": ids,
-        "attach_report": attach_report == "1",
-    }
-
+    token = store_bulk_selection(user.id, ids, attach_report == "1")
     response = Response(status_code=200)
     response.headers["HX-Redirect"] = f"/email?bulk_token={token}"
     return response
@@ -164,18 +187,7 @@ def bulk_email_redirect(
     if not ids:
         return HTMLResponse('<div class="error-msg">No leads selected</div>')
 
-    # Evict oldest entries if cache is full
-    while len(_bulk_selections) >= _BULK_SELECTIONS_MAX:
-        oldest_key = next(iter(_bulk_selections))
-        _bulk_selections.pop(oldest_key, None)
-
-    token = str(_uuid.uuid4()).replace("-", "")[:12]
-    _bulk_selections[token] = {
-        "user_id": user.id,
-        "lead_ids": ids,
-        "attach_report": attach_report == "1",
-    }
-
+    token = store_bulk_selection(user.id, ids, attach_report == "1")
     response = Response(status_code=200)
     response.headers["HX-Redirect"] = f"/email?bulk_token={token}"
     return response
@@ -193,17 +205,7 @@ def bulk_sms_redirect(
     if not ids:
         return HTMLResponse('<div class="error-msg">No leads selected</div>')
 
-    # Evict oldest entries if cache is full
-    while len(_bulk_selections) >= _BULK_SELECTIONS_MAX:
-        oldest_key = next(iter(_bulk_selections))
-        _bulk_selections.pop(oldest_key, None)
-
-    token = str(_uuid.uuid4()).replace("-", "")[:12]
-    _bulk_selections[token] = {
-        "user_id": user.id,
-        "lead_ids": ids,
-    }
-
+    token = store_bulk_selection(user.id, ids)
     response = Response(status_code=200)
     response.headers["HX-Redirect"] = f"/sms?bulk_token={token}"
     return response

@@ -85,11 +85,31 @@ def create_app() -> FastAPI:
     app.include_router(admin.router)
 
     @app.on_event("startup")
-    def _start_background_workers():
+    def _recover_and_start_workers():
+        # Work that was mid-flight when the previous process died: release batch
+        # scoring claims and resume interrupted CSV imports (state lives in the DB).
+        try:
+            from app.database import SessionLocal
+            from app.routers.scoring import reset_stale_claims
+            from app.services.csv_import import resume_pending_imports
+
+            db = SessionLocal()
+            try:
+                released = reset_stale_claims(db)
+            finally:
+                db.close()
+            resumed = resume_pending_imports()
+            if released or resumed:
+                logger.info("Startup recovery: released %s scoring claims, resumed %s import leads", released, resumed)
+        except Exception:
+            logger.exception("Startup recovery failed")
+
         try:
             from app.services.send_jobs import start_worker
             start_worker()
         except ImportError:
             pass
+        except Exception:
+            logger.exception("Could not start send-jobs worker")
 
     return app

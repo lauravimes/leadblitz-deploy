@@ -1,5 +1,6 @@
 import logging
-from datetime import datetime, timedelta
+import secrets
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 
 import requests
@@ -165,6 +166,26 @@ def save_sendgrid(
 
 # --- Email Provider: Gmail OAuth ---
 
+OAUTH_STATE_COOKIE = "oauth_state"
+
+
+def _issue_oauth_state(response: RedirectResponse, user_id: int) -> str:
+    """Random, single-use CSRF nonce bound to the user via a short-lived HttpOnly
+    cookie. A predictable state (e.g. the user id) would let an attacker bind their
+    own mailbox to a victim's account by getting the victim to open the callback."""
+    nonce = secrets.token_urlsafe(24)
+    response.set_cookie(
+        OAUTH_STATE_COOKIE, f"{user_id}:{nonce}", max_age=600, httponly=True, samesite="lax",
+    )
+    return nonce
+
+
+def _check_oauth_state(request: Request, user_id: int, state: str) -> bool:
+    cookie = request.cookies.get(OAUTH_STATE_COOKIE, "")
+    expected = f"{user_id}:{state}"
+    return bool(state) and secrets.compare_digest(cookie, expected)
+
+
 @router.get("/api/settings/email/gmail/url")
 def gmail_oauth_url(request: Request, db: Session = Depends(get_db)):
     user = get_current_user(request, db)
@@ -173,6 +194,8 @@ def gmail_oauth_url(request: Request, db: Session = Depends(get_db)):
         return HTMLResponse('<div class="error-msg">Gmail OAuth not configured on server</div>')
 
     base_url = str(request.base_url).rstrip("/")
+    response = RedirectResponse("/")  # url set below once state is issued
+    nonce = _issue_oauth_state(response, user.id)
     params = {
         "client_id": s.gmail_client_id,
         "redirect_uri": f"{base_url}/api/settings/email/gmail/callback",
@@ -180,22 +203,17 @@ def gmail_oauth_url(request: Request, db: Session = Depends(get_db)):
         "scope": "https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.email",
         "access_type": "offline",
         "prompt": "consent",
-        "state": str(user.id),
+        "state": nonce,
     }
-    url = f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
-    return RedirectResponse(url)
+    response.headers["location"] = f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
+    return response
 
 
 @router.get("/api/settings/email/gmail/callback")
 def gmail_callback(request: Request, code: str = "", state: str = "", db: Session = Depends(get_db)):
     user = get_current_user(request, db)
 
-    # Verify state matches logged-in user to prevent IDOR
-    try:
-        state_user_id = int(state)
-    except (ValueError, TypeError):
-        return RedirectResponse("/settings?error=gmail_failed")
-    if state_user_id != user.id:
+    if not _check_oauth_state(request, user.id, state):
         return RedirectResponse("/settings?error=gmail_failed")
 
     s = get_settings()
@@ -227,10 +245,12 @@ def gmail_callback(request: Request, code: str = "", state: str = "", db: Sessio
     es.gmail_email_address = gmail_email
     es.gmail_access_token = encrypt(data["access_token"])
     es.gmail_refresh_token = encrypt(data.get("refresh_token", ""))
-    es.gmail_token_expiry = datetime.utcnow() + timedelta(seconds=data.get("expires_in", 3600))
+    es.gmail_token_expiry = datetime.now(timezone.utc) + timedelta(seconds=data.get("expires_in", 3600))
     db.commit()
 
-    return RedirectResponse("/settings?success=gmail")
+    response = RedirectResponse("/settings?success=gmail")
+    response.delete_cookie(OAUTH_STATE_COOKIE)
+    return response
 
 
 # --- Email Provider: Outlook OAuth ---
@@ -243,27 +263,24 @@ def outlook_oauth_url(request: Request, db: Session = Depends(get_db)):
         return HTMLResponse('<div class="error-msg">Outlook OAuth not configured on server</div>')
 
     base_url = str(request.base_url).rstrip("/")
+    response = RedirectResponse("/")
+    nonce = _issue_oauth_state(response, user.id)
     params = {
         "client_id": s.outlook_client_id,
         "redirect_uri": f"{base_url}/api/settings/email/outlook/callback",
         "response_type": "code",
         "scope": "offline_access Mail.Send User.Read",
-        "state": str(user.id),
+        "state": nonce,
     }
-    url = f"https://login.microsoftonline.com/common/oauth2/v2.0/authorize?{urlencode(params)}"
-    return RedirectResponse(url)
+    response.headers["location"] = f"https://login.microsoftonline.com/common/oauth2/v2.0/authorize?{urlencode(params)}"
+    return response
 
 
 @router.get("/api/settings/email/outlook/callback")
 def outlook_callback(request: Request, code: str = "", state: str = "", db: Session = Depends(get_db)):
     user = get_current_user(request, db)
 
-    # Verify state matches logged-in user to prevent IDOR
-    try:
-        state_user_id = int(state)
-    except (ValueError, TypeError):
-        return RedirectResponse("/settings?error=outlook_failed")
-    if state_user_id != user.id:
+    if not _check_oauth_state(request, user.id, state):
         return RedirectResponse("/settings?error=outlook_failed")
 
     s = get_settings()
@@ -296,10 +313,12 @@ def outlook_callback(request: Request, code: str = "", state: str = "", db: Sess
     es.outlook_email_address = outlook_email
     es.outlook_access_token = encrypt(data["access_token"])
     es.outlook_refresh_token = encrypt(data.get("refresh_token", ""))
-    es.outlook_token_expiry = datetime.utcnow() + timedelta(seconds=data.get("expires_in", 3600))
+    es.outlook_token_expiry = datetime.now(timezone.utc) + timedelta(seconds=data.get("expires_in", 3600))
     db.commit()
 
-    return RedirectResponse("/settings?success=outlook")
+    response = RedirectResponse("/settings?success=outlook")
+    response.delete_cookie(OAUTH_STATE_COOKIE)
+    return response
 
 
 # --- Disconnect / Test ---

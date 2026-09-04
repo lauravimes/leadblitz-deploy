@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import secrets
 from datetime import datetime, timezone, timedelta
@@ -102,8 +103,12 @@ def _should_grant_free_credits(db: Session, email: str, ip: Optional[str], exclu
     return True
 
 
+def _hash_reset_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
 def _set_session(request: Request, response: Response, user: User) -> Response:
-    token = create_token(user.id)
+    token = create_token(user)
     response.set_cookie(
         "session",
         token,
@@ -236,7 +241,8 @@ def forgot_password(
     # in the background) so the response does not reveal whether the email exists.
     if user:
         token = secrets.token_urlsafe(32)
-        user.reset_token = token
+        # Only the hash is stored, so a database read never yields a usable link.
+        user.reset_token = _hash_reset_token(token)
         user.reset_token_expiry = datetime.now(timezone.utc) + timedelta(hours=1)
         db.commit()
 
@@ -267,7 +273,7 @@ def reset_password(
         return _error(request, pw_err)
 
     user = db.query(User).filter(
-        User.reset_token == token,
+        User.reset_token == _hash_reset_token(token),
         User.reset_token_expiry > datetime.now(timezone.utc),
     ).first()
 

@@ -17,19 +17,23 @@ def get_db():
 
 def get_current_user(request: Request, db: Session) -> User:
     """Extract user from signed session cookie. Raises 401 if invalid."""
-    from app.auth.sessions import decode_token
+    from app.auth.sessions import decode_token, password_version
 
     token = request.cookies.get("session")
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    user_id = decode_token(token)
-    if user_id is None:
+    payload = decode_token(token)
+    if payload is None:
         raise HTTPException(status_code=401, detail="Invalid session")
 
-    user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
+    user = db.query(User).filter(User.id == payload["uid"], User.is_active == True).first()
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
+
+    # Sessions issued before a password change/reset are no longer valid.
+    if payload.get("pv") != password_version(user.password_hash):
+        raise HTTPException(status_code=401, detail="Session expired")
 
     return user
 

@@ -8,7 +8,7 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 
-from app.services.url_safety import UnsafeURL, safe_get
+from app.services.url_safety import UnsafeURL, UnresolvableHost, safe_get
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +102,9 @@ def fetch_site_safely(url: str, timeout: int = 15, max_retries: int = 3) -> Dict
             if attempt < max_retries - 1:
                 time.sleep(1 + attempt)
                 continue
+        except UnresolvableHost as exc:
+            result["errors"].append(f"Domain does not resolve: {str(exc)[:100]}")
+            return result
         except UnsafeURL as exc:
             result["errors"].append(f"Blocked URL: {str(exc)[:100]}")
             result["blocked_url"] = True

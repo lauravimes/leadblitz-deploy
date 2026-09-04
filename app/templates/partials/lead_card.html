@@ -57,4 +57,10 @@
       <span class="subtext" title="This lead has no website to score">No website</span>
     {% endif %}
   </div>
+  {% set last_fail = lead.score_breakdown if (lead.score is none and lead.score_breakdown and lead.score_breakdown.get('has_errors')) else none %}
+  {% if score_error %}
+  <div class="error-msg lead-row-note" role="alert">{{ score_error }}</div>
+  {% elif last_fail %}
+  <div class="subtext lead-row-note" title="{{ last_fail.get('errors', []) | join(', ') }}">Last attempt failed: {{ last_fail.get('error_message', 'could not load the site') }} No credit was charged — try again later.</div>
+  {% endif %}
 </div>

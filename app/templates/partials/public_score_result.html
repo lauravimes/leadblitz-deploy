@@ -1,13 +1,22 @@
-{% set score = result.get('final_score', 0) %}
-{% set breakdown = result.get('breakdown', {}) %}
+{% set has_errors = result.get('has_errors', False) %}
+{% set score = result.get('final_score') %}
+{% set breakdown = result.get('breakdown', {}) or {} %}
 {% set heuristic = breakdown.get('heuristic', {}) %}
 {% set ai = breakdown.get('ai', {}) %}
-{% set report = result.get('plain_english_report', {}) %}
-{% set tech = result.get('technographics', {}) %}
-{% set has_errors = result.get('has_errors', False) %}
+{% set report = result.get('plain_english_report', {}) or {} %}
+{% set tech = result.get('technographics', {}) or {} %}
 
 <!-- Score header -->
 <div class="card text-center mt-32 score-hero">
+  {% if has_errors or score is none %}
+  <p class="label">Website score</p>
+  <div class="mt-12 mb-8"><span class="score score-xl score-none">—</span></div>
+  <p class="subtext mt-8">{{ url }}</p>
+  <p class="text-amber mt-12" role="alert">
+    {{ result.get('error_message') or 'We could not load this website. It may be down or blocking automated requests.' }}
+  </p>
+  <p class="subtext mt-8">Try again in a minute, or check the address is correct.</p>
+  {% else %}
   <p class="label">Website score</p>
   <div class="mt-12 mb-8">
     <span class="score score-xl {{ 'score-high' if score >= 70 else ('score-mid' if score >= 40 else 'score-low') }}">
@@ -15,19 +24,13 @@
     </span>
   </div>
   <p class="subtext mt-8">{{ url }}</p>
-
-  {% if has_errors %}
-  <p class="subtext text-amber mt-12">
-    {% if result.get('bot_blocked') %}
-    This site blocked our scanner. The score may not reflect actual quality.
-    {% else %}
-    We had trouble accessing parts of this site. Results may be incomplete.
-    {% endif %}
-  </p>
+  {% if result.get('errors') %}
+  <p class="subtext text-amber mt-12">Some pages could not be loaded; results may be incomplete.</p>
+  {% endif %}
   {% endif %}
 </div>
 
-{% if not has_errors or score > 0 %}
+{% if not has_errors and score is not none %}
 
 <!-- Score breakdown -->
 <div class="card">

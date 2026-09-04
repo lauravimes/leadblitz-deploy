@@ -4,6 +4,20 @@
 {% set report = breakdown.get('plain_english_report', {}) %}
 {% set tech = lead.technographics or {} %}
 
+{% if score_error or lead.score is none %}
+<div class="card mt-16">
+  <h2>Score breakdown</h2>
+  <div class="error-msg mt-12" role="alert">
+    {{ score_error or breakdown.get('error_message', 'This lead has not been scored yet.') }}
+  </div>
+  {% if lead.website %}
+  <p class="subtext mt-12">No credit was charged. You can try again — sites that block automated visitors or are temporarily down often succeed later.</p>
+  <button class="btn btn-primary btn-sm mt-8 score-btn" type="button"
+          hx-post="/api/score/{{ lead.id }}" hx-target="#score-panel" hx-swap="innerHTML"
+          title="Score this website · 1 credit">Try again <span class="cost">· 1 cr</span></button>
+  {% endif %}
+</div>
+{% else %}
 <div class="card mt-16">
   <div class="row row-between mb-16">
     <h2 class="mb-0">Score breakdown</h2>
@@ -123,4 +137,5 @@
     </div>
   </div>
 </div>
+{% endif %}
 {% endif %}

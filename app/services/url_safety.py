@@ -30,6 +30,10 @@ class UnsafeURL(ValueError):
     """Raised when a URL must not be fetched from the server."""
 
 
+class UnresolvableHost(UnsafeURL):
+    """The hostname does not resolve (typo, dead domain) — not a policy block."""
+
+
 def _is_public_address(ip: ipaddress._BaseAddress) -> bool:
     return not (
         ip.is_private
@@ -63,7 +67,7 @@ def resolve_public(host: str) -> list[str]:
     try:
         infos = socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)
     except socket.gaierror as exc:
-        raise UnsafeURL(f"cannot resolve {host}: {exc}") from exc
+        raise UnresolvableHost(f"cannot resolve {host}: {exc}") from exc
 
     addresses = []
     for info in infos:
@@ -76,7 +80,7 @@ def resolve_public(host: str) -> list[str]:
             raise UnsafeURL(f"{host} resolves to non-public address {addr}")
         addresses.append(str(ip))
     if not addresses:
-        raise UnsafeURL(f"{host} did not resolve")
+        raise UnresolvableHost(f"{host} did not resolve")
     return addresses
 
 

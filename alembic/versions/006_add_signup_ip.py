@@ -16,8 +16,26 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column("users", sa.Column("signup_ip", sa.String(45), nullable=True))
+    # Idempotent: prod may already have signup_ip while alembic_version stuck at 005
+    # (column applied outside stamp). Plain ADD COLUMN then fails DuplicateColumn.
+    conn = op.get_bind()
+    exists = conn.execute(
+        sa.text(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name = 'users' AND column_name = 'signup_ip'"
+        )
+    ).scalar()
+    if not exists:
+        op.add_column("users", sa.Column("signup_ip", sa.String(45), nullable=True))
 
 
 def downgrade() -> None:
-    op.drop_column("users", "signup_ip")
+    conn = op.get_bind()
+    exists = conn.execute(
+        sa.text(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name = 'users' AND column_name = 'signup_ip'"
+        )
+    ).scalar()
+    if exists:
+        op.drop_column("users", "signup_ip")

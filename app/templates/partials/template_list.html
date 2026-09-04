@@ -1,0 +1,27 @@
+{# Context: templates (list[EmailTemplate]), flash (str) #}
+{% if flash %}
+<p class="{{ 'saved-flash' if 'saved' in flash or 'deleted' in flash else 'error-msg' }}" style="margin-bottom:8px">{{ flash }}</p>
+{% endif %}
+{% if templates %}
+<div class="report-list">
+  {% for t in templates %}
+  <div class="card card-compact" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+    <div style="flex:1;min-width:200px">
+      <div style="font-weight:600">{{ t.name }}</div>
+      <div class="subtext">{{ t.subject or '(no subject)' }}</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button type="button" class="btn btn-secondary btn-sm"
+              data-subject="{{ t.subject }}" data-body="{{ t.body }}"
+              onclick="useTemplate(this)">Use</button>
+      <button type="button" class="btn btn-danger btn-sm"
+              hx-delete="/api/email/templates/{{ t.id }}"
+              hx-confirm="Delete template “{{ t.name }}”?"
+              hx-target="#template-list" hx-swap="innerHTML">Delete</button>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<p class="subtext">No saved templates yet. Write a subject and body above, give it a name, and save it here.</p>
+{% endif %}

@@ -1,11 +1,16 @@
 {% if previews %}
   {% for p in previews %}
   <div class="card card-compact">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;flex-wrap:wrap">
       <span style="font-weight:600">{{ p.lead.name }}</span>
-      <span class="subtext">{{ p.lead.phone or 'No phone' }}</span>
+      <span class="subtext">
+        {% if p.to_phone %}{{ p.to_phone }}{% if p.to_phone != p.lead.phone %} <span style="opacity:.7">(from {{ p.lead.phone }})</span>{% endif %}
+        {% elif p.lead.phone %}<span style="color:var(--red)">Can't parse "{{ p.lead.phone }}" — will be skipped</span>
+        {% else %}No phone{% endif %}
+      </span>
     </div>
     <div style="font-size:.87rem;color:var(--muted);white-space:pre-line;background:#f3f4f6;padding:12px;border-radius:var(--radius)">{{ p.message }}</div>
+    <p class="subtext" style="margin-top:6px">{{ p.message | length }} characters · {{ p.segments }} segment{{ 's' if p.segments != 1 }}</p>
   </div>
   {% endfor %}
 {% else %}

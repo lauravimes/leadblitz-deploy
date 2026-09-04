@@ -56,7 +56,7 @@ def enrich_from_website(
             continue
 
         emails = extract_emails_from_website(lead.website)
-        best = choose_best_email(emails)
+        best = choose_best_email(emails, own_domain=lead.website)
 
         if best and not lead.email:
             lead.email = best
@@ -145,7 +145,7 @@ def enrich_hunter(
 
 
 def _batch_enrich_worker(lead_ids: list[str], user_id: int, batch_id: str):
-    """Background thread that scrapes emails from lead websites using 10 concurrent workers."""
+    """Background thread that scrapes emails from lead websites using a small pool of concurrent workers."""
     import concurrent.futures
     from app.database import SessionLocal
 
@@ -176,7 +176,7 @@ def _batch_enrich_worker(lead_ids: list[str], user_id: int, batch_id: str):
         # Step 2: scrape website (no DB connection held)
         try:
             emails = extract_emails_from_website(website, timeout=5)
-            best = choose_best_email(emails)
+            best = choose_best_email(emails, own_domain=website)
         except Exception as e:
             logger.error(f"Batch enrich scrape error for lead {lid}: {e}")
             status["failed"] += 1

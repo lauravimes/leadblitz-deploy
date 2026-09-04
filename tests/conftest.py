@@ -19,6 +19,8 @@ os.environ.setdefault("STRIPE_SECRET_KEY", "sk_test_dummy")
 os.environ.setdefault("STRIPE_WEBHOOK_SECRET", "whsec_testsecret")
 os.environ.setdefault("OPENAI_API_KEY", "sk-test-dummy")
 os.environ.setdefault("GOOGLE_MAPS_API_KEY", "test-maps-key")
+# Tests drive the email send worker synchronously via send_jobs.process_due_items().
+os.environ.setdefault("SEND_JOBS_WORKER", "0")
 
 import pytest
 from fastapi.testclient import TestClient

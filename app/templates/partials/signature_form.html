@@ -1,0 +1,33 @@
+{# Context: sig (EmailSignature | None), saved (bool) #}
+<form hx-post="/api/email/signatures" hx-target="#signature-form" hx-swap="innerHTML" style="margin-top:16px">
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+    <div class="form-group">
+      <label for="sig-full-name">Full name</label>
+      <input type="text" name="full_name" id="sig-full-name" value="{{ sig.full_name if sig else '' }}">
+    </div>
+    <div class="form-group">
+      <label for="sig-position">Position</label>
+      <input type="text" name="position" id="sig-position" value="{{ sig.position if sig else '' }}">
+    </div>
+    <div class="form-group">
+      <label for="sig-company">Company / agency name</label>
+      <input type="text" name="company_name" id="sig-company" value="{{ sig.company_name if sig else '' }}">
+    </div>
+    <div class="form-group">
+      <label for="sig-website">Website</label>
+      <input type="text" name="website" id="sig-website" placeholder="https://youragency.com" value="{{ sig.website if sig else '' }}">
+    </div>
+    <div class="form-group">
+      <label for="sig-phone">Phone</label>
+      <input type="text" name="phone" id="sig-phone" value="{{ sig.phone if sig else '' }}">
+    </div>
+  </div>
+  <div class="form-group">
+    <label for="sig-pitch">Base pitch (used by AI-write)</label>
+    <textarea name="base_pitch" id="sig-pitch" rows="3" placeholder="We help local businesses get more customers through modern websites...">{{ sig.base_pitch if sig else '' }}</textarea>
+  </div>
+  <div style="display:flex;gap:12px;align-items:center">
+    <button type="submit" class="btn btn-primary btn-sm">Save signature</button>
+    {% if saved %}<span class="saved-flash">Signature saved</span>{% endif %}
+  </div>
+</form>

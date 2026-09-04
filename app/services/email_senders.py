@@ -1,20 +1,43 @@
+"""Outgoing email for user-configured providers (SMTP, SendGrid, Gmail, Outlook).
+
+Design:
+
+* ``deliver_email(settings, ...)`` does the network work and needs **no DB
+  session** — callers load ``EmailSettings`` first, close their session, then
+  deliver. The background send worker relies on this so a slow SMTP server
+  never pins a Postgres connection.
+* Every provider failure surfaces as ``EmailProviderError`` with a message a
+  user can act on; nothing else escapes.
+* Bodies are sent as ``multipart/alternative`` (text/plain + text/html) and the
+  user's saved signature is appended by ``prepare_body``.
+"""
 import base64
+import html as _html
 import logging
+import re
 import smtplib
-from datetime import datetime, timedelta
-from email.mime.application import MIMEApplication
+import socket
+from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
+from email import encoders
+from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import Optional
+from typing import Iterator, Optional, Sequence, Tuple
 
 import requests
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.models import EmailSettings as EmailSettingsModel
-from app.services.encryption import encrypt, decrypt
+from app.models import EmailSettings as EmailSettingsModel, EmailSignature
+from app.services.encryption import decrypt, encrypt
 
 logger = logging.getLogger(__name__)
+
+Attachment = Tuple[bytes, str, str]  # (bytes, filename, mime_type)
+
+_HTTP_TIMEOUT = 30
+_SMTP_TIMEOUT = 20
 
 
 class EmailProviderError(Exception):
@@ -25,306 +48,331 @@ def get_email_settings(db: Session, user_id: int) -> Optional[EmailSettingsModel
     return db.query(EmailSettingsModel).filter(EmailSettingsModel.user_id == user_id).first()
 
 
-def refresh_gmail_token(settings: EmailSettingsModel, db: Session) -> str:
+# --- Body helpers -----------------------------------------------------------
+
+_BLOCK_HTML = re.compile(r"<(p|br|div|table|ul|ol|h[1-6])\b", re.IGNORECASE)
+
+
+def _nl2br(text: str) -> str:
+    """Turn plain-text newlines into ``<br>``.
+
+    Bodies that already contain block-level HTML (``<p>``, ``<br>``, ``<div>``…)
+    are returned untouched — adding ``<br>`` to them double-spaces every line.
+    """
+    if not text:
+        return ""
+    if _BLOCK_HTML.search(text):
+        return text
+    return text.replace("\r\n", "\n").replace("\n", "<br>\n")
+
+
+def html_to_text(html_body: str) -> str:
+    """Rough text/plain rendering of an HTML body for the alternative part."""
+    text = re.sub(r"(?i)<\s*br\s*/?>", "\n", html_body or "")
+    text = re.sub(r"(?i)</\s*(p|div|h[1-6]|li|tr)\s*>", "\n\n", text)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = _html.unescape(text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def signature_html(sig: Optional[EmailSignature]) -> str:
+    """Render the saved signature as a small HTML block ("" when nothing is set)."""
+    if not sig:
+        return ""
+    lines = []
+    if sig.full_name:
+        lines.append(f"<strong>{_html.escape(sig.full_name)}</strong>")
+    title = " · ".join(_html.escape(x) for x in (sig.position or "", sig.company_name or "") if x)
+    if title:
+        lines.append(title)
+    if sig.phone:
+        lines.append(_html.escape(sig.phone))
+    if sig.website:
+        href = sig.website if sig.website.startswith(("http://", "https://")) else f"https://{sig.website}"
+        lines.append(f'<a href="{_html.escape(href, quote=True)}">{_html.escape(sig.website)}</a>')
+    if not lines:
+        return ""
+    return '<div class="signature" style="margin-top:16px">' + "<br>\n".join(lines) + "</div>"
+
+
+def prepare_body(html_body: str, sig: Optional[EmailSignature] = None) -> str:
+    """Normalise a user-typed body and append the saved signature."""
+    body = _nl2br(html_body)
+    signature = signature_html(sig)
+    if signature:
+        body = f"{body}\n{signature}"
+    return body
+
+
+def build_message(
+    from_email: str, to_email: str, subject: str, html_body: str,
+    attachments: Optional[Sequence[Attachment]] = None,
+) -> MIMEMultipart:
+    """text/plain + text/html alternative, wrapped in multipart/mixed when there
+    are attachments. Attachment MIME types keep their real maintype."""
+    alternative = MIMEMultipart("alternative")
+    alternative.attach(MIMEText(html_to_text(html_body), "plain", "utf-8"))
+    alternative.attach(MIMEText(html_body, "html", "utf-8"))
+
+    if attachments:
+        message = MIMEMultipart("mixed")
+        message.attach(alternative)
+        for att_bytes, att_filename, att_mime in attachments:
+            maintype, _, subtype = (att_mime or "application/octet-stream").partition("/")
+            part = MIMEBase(maintype or "application", subtype or "octet-stream")
+            part.set_payload(att_bytes)
+            encoders.encode_base64(part)
+            part.add_header("Content-Disposition", "attachment", filename=att_filename)
+            message.attach(part)
+    else:
+        message = alternative
+
+    message["From"] = from_email
+    message["To"] = to_email
+    message["Subject"] = subject
+    return message
+
+
+# --- Error translation --------------------------------------------------------
+
+def _friendly_error(provider: str, exc: BaseException, settings: EmailSettingsModel) -> str:
+    if isinstance(exc, smtplib.SMTPAuthenticationError):
+        return ("SMTP authentication failed — check the username and password "
+                "(Gmail and Outlook need an App Password, not your login password).")
+    if isinstance(exc, smtplib.SMTPRecipientsRefused):
+        return f"The mail server refused the recipient: {exc.recipients}"
+    if isinstance(exc, smtplib.SMTPServerDisconnected):
+        return "The SMTP server closed the connection unexpectedly — check the port/TLS setting."
+    if isinstance(exc, smtplib.SMTPException):
+        return f"SMTP error: {exc}"
+    if isinstance(exc, (socket.timeout, TimeoutError, requests.Timeout)):
+        host = f"{settings.smtp_host}:{settings.smtp_port}" if provider == "smtp" else provider
+        return f"Connection to {host} timed out. Check the host, port and TLS settings."
+    if isinstance(exc, (ConnectionRefusedError, socket.gaierror)):
+        return f"Could not connect to {settings.smtp_host}:{settings.smtp_port} — check the SMTP host and port."
+    if isinstance(exc, requests.RequestException):
+        return f"Network error talking to {provider}: {exc}"
+    if isinstance(exc, OSError):
+        return f"Network error: {exc}"
+    return f"{provider} error: {exc}"
+
+
+@contextmanager
+def _provider_errors(provider: str, settings: EmailSettingsModel) -> Iterator[None]:
+    try:
+        yield
+    except EmailProviderError:
+        raise
+    except Exception as exc:  # noqa: BLE001 — everything becomes a user-facing error
+        logger.warning("[email] %s send failed: %s", provider, exc)
+        raise EmailProviderError(_friendly_error(provider, exc, settings)) from exc
+
+
+# --- OAuth token refresh (Gmail / Outlook) ------------------------------------
+
+def _persist_tokens(settings: EmailSettingsModel, **fields) -> None:
+    """Write refreshed tokens with a short-lived session so callers can stay
+    session-free across the network call."""
+    from app.database import SessionLocal
+
+    for key, value in fields.items():
+        setattr(settings, key, value)
+    with SessionLocal() as db:
+        db.query(EmailSettingsModel).filter(EmailSettingsModel.id == settings.id).update(fields)
+        db.commit()
+
+
+def _token_expired(expiry: Optional[datetime]) -> bool:
+    if not expiry:
+        return False
+    if expiry.tzinfo is None:
+        expiry = expiry.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) >= expiry
+
+
+def refresh_gmail_token(settings: EmailSettingsModel) -> str:
     if not settings.gmail_refresh_token:
-        raise EmailProviderError("No Gmail refresh token available")
-
-    refresh_token = decrypt(settings.gmail_refresh_token)
+        raise EmailProviderError("Gmail access has expired — reconnect Gmail in Settings.")
     s = get_settings()
-
     resp = requests.post("https://oauth2.googleapis.com/token", data={
         "client_id": s.gmail_client_id,
         "client_secret": s.gmail_client_secret,
-        "refresh_token": refresh_token,
+        "refresh_token": decrypt(settings.gmail_refresh_token),
         "grant_type": "refresh_token",
-    })
+    }, timeout=_HTTP_TIMEOUT)
     if resp.status_code != 200:
         raise EmailProviderError(f"Failed to refresh Gmail token: {resp.text}")
-
     data = resp.json()
-    settings.gmail_access_token = encrypt(data["access_token"])
-    settings.gmail_token_expiry = datetime.utcnow() + timedelta(seconds=data.get("expires_in", 3600))
-    db.commit()
-    return decrypt(settings.gmail_access_token)
+    _persist_tokens(
+        settings,
+        gmail_access_token=encrypt(data["access_token"]),
+        gmail_token_expiry=datetime.now(timezone.utc) + timedelta(seconds=data.get("expires_in", 3600)),
+    )
+    return data["access_token"]
 
 
-def send_via_gmail(settings: EmailSettingsModel, to_email: str, subject: str, html_body: str, db: Session) -> dict:
+def refresh_outlook_token(settings: EmailSettingsModel) -> str:
+    if not settings.outlook_refresh_token:
+        raise EmailProviderError("Outlook access has expired — reconnect Outlook in Settings.")
+    s = get_settings()
+    resp = requests.post("https://login.microsoftonline.com/common/oauth2/v2.0/token", data={
+        "client_id": s.outlook_client_id,
+        "client_secret": s.outlook_client_secret,
+        "refresh_token": decrypt(settings.outlook_refresh_token),
+        "grant_type": "refresh_token",
+        "scope": "offline_access Mail.Send User.Read",
+    }, timeout=_HTTP_TIMEOUT)
+    if resp.status_code != 200:
+        raise EmailProviderError(f"Failed to refresh Outlook token: {resp.text}")
+    data = resp.json()
+    _persist_tokens(
+        settings,
+        outlook_access_token=encrypt(data["access_token"]),
+        outlook_token_expiry=datetime.now(timezone.utc) + timedelta(seconds=data.get("expires_in", 3600)),
+    )
+    return data["access_token"]
+
+
+# --- Providers ------------------------------------------------------------------
+
+def send_via_gmail(settings: EmailSettingsModel, to_email: str, subject: str, html_body: str,
+                   attachments: Optional[Sequence[Attachment]] = None) -> dict:
     if not settings.gmail_access_token or not settings.gmail_email_address:
-        raise EmailProviderError("Gmail not properly configured")
-
-    if settings.gmail_token_expiry and datetime.utcnow() >= settings.gmail_token_expiry:
-        access_token = refresh_gmail_token(settings, db)
-    else:
-        access_token = decrypt(settings.gmail_access_token)
-
-    message = MIMEMultipart("alternative")
-    message["From"] = settings.gmail_email_address
-    message["To"] = to_email
-    message["Subject"] = subject
-    message.attach(MIMEText(html_body, "html"))
-
-    raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
+        raise EmailProviderError("Gmail is not connected — connect it in Settings.")
+    access_token = (refresh_gmail_token(settings) if _token_expired(settings.gmail_token_expiry)
+                    else decrypt(settings.gmail_access_token))
+    message = build_message(settings.gmail_email_address, to_email, subject, html_body, attachments)
     resp = requests.post(
         "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
         headers={"Authorization": f"Bearer {access_token}"},
-        json={"raw": raw_message},
+        json={"raw": base64.urlsafe_b64encode(message.as_bytes()).decode()},
+        timeout=_HTTP_TIMEOUT,
     )
     if resp.status_code != 200:
         raise EmailProviderError(f"Gmail API error: {resp.text}")
     return {"success": True, "provider": "gmail", "message_id": resp.json().get("id")}
 
 
-def refresh_outlook_token(settings: EmailSettingsModel, db: Session) -> str:
-    if not settings.outlook_refresh_token:
-        raise EmailProviderError("No Outlook refresh token available")
-
-    refresh_token = decrypt(settings.outlook_refresh_token)
-    s = get_settings()
-
-    resp = requests.post("https://login.microsoftonline.com/common/oauth2/v2.0/token", data={
-        "client_id": s.outlook_client_id,
-        "client_secret": s.outlook_client_secret,
-        "refresh_token": refresh_token,
-        "grant_type": "refresh_token",
-        "scope": "offline_access Mail.Send User.Read",
-    })
-    if resp.status_code != 200:
-        raise EmailProviderError(f"Failed to refresh Outlook token: {resp.text}")
-
-    data = resp.json()
-    settings.outlook_access_token = encrypt(data["access_token"])
-    settings.outlook_token_expiry = datetime.utcnow() + timedelta(seconds=data.get("expires_in", 3600))
-    db.commit()
-    return decrypt(settings.outlook_access_token)
-
-
-def send_via_outlook(settings: EmailSettingsModel, to_email: str, subject: str, html_body: str, db: Session) -> dict:
+def send_via_outlook(settings: EmailSettingsModel, to_email: str, subject: str, html_body: str,
+                     attachments: Optional[Sequence[Attachment]] = None) -> dict:
     if not settings.outlook_access_token or not settings.outlook_email_address:
-        raise EmailProviderError("Outlook not properly configured")
-
-    if settings.outlook_token_expiry and datetime.utcnow() >= settings.outlook_token_expiry:
-        access_token = refresh_outlook_token(settings, db)
-    else:
-        access_token = decrypt(settings.outlook_access_token)
-
+        raise EmailProviderError("Outlook is not connected — connect it in Settings.")
+    access_token = (refresh_outlook_token(settings) if _token_expired(settings.outlook_token_expiry)
+                    else decrypt(settings.outlook_access_token))
+    payload = {
+        "subject": subject,
+        "body": {"contentType": "HTML", "content": html_body},
+        "toRecipients": [{"emailAddress": {"address": to_email}}],
+    }
+    if attachments:
+        payload["attachments"] = [
+            {
+                "@odata.type": "#microsoft.graph.fileAttachment",
+                "name": name, "contentType": mime,
+                "contentBytes": base64.b64encode(data).decode(),
+            }
+            for data, name, mime in attachments
+        ]
     resp = requests.post(
         "https://graph.microsoft.com/v1.0/me/sendMail",
         headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
-        json={"message": {
-            "subject": subject,
-            "body": {"contentType": "HTML", "content": html_body},
-            "toRecipients": [{"emailAddress": {"address": to_email}}],
-        }},
+        json={"message": payload},
+        timeout=_HTTP_TIMEOUT,
     )
     if resp.status_code != 202:
         raise EmailProviderError(f"Outlook Graph API error: {resp.text}")
     return {"success": True, "provider": "outlook"}
 
 
-def send_via_smtp(settings: EmailSettingsModel, to_email: str, subject: str, html_body: str) -> dict:
+def send_via_smtp(settings: EmailSettingsModel, to_email: str, subject: str, html_body: str,
+                  attachments: Optional[Sequence[Attachment]] = None) -> dict:
     if not all([settings.smtp_host, settings.smtp_port, settings.smtp_username,
                 settings.smtp_password_encrypted, settings.smtp_from_email]):
-        raise EmailProviderError("SMTP not properly configured")
+        raise EmailProviderError("SMTP is not fully configured — fill in host, port, username, password and from-address in Settings.")
+    password = decrypt(settings.smtp_password_encrypted)
+    if not password:
+        raise EmailProviderError("Stored SMTP password could not be read — re-enter it in Settings.")
 
-    smtp_password = decrypt(settings.smtp_password_encrypted)
-    message = MIMEMultipart("alternative")
-    message["From"] = settings.smtp_from_email
-    message["To"] = to_email
-    message["Subject"] = subject
-    message.attach(MIMEText(html_body, "html"))
-
-    import socket as _socket
-    old_timeout = _socket.getdefaulttimeout()
-    _socket.setdefaulttimeout(15)
+    message = build_message(settings.smtp_from_email, to_email, subject, html_body, attachments)
+    if settings.smtp_use_tls:
+        server = smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=_SMTP_TIMEOUT)
+        server.starttls()
+    else:
+        server = smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=_SMTP_TIMEOUT)
     try:
-        if settings.smtp_use_tls:
-            server = smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15)
-            server.starttls()
-        else:
-            server = smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=15)
-        server.login(settings.smtp_username, smtp_password)
+        server.login(settings.smtp_username, password)
         server.send_message(message)
-        server.quit()
-        return {"success": True, "provider": "smtp"}
-    except (TimeoutError, _socket.timeout, OSError) as e:
-        raise EmailProviderError(
-            f"SMTP connection timed out: {e}. "
-            "Check your SMTP host, port, and TLS settings. "
-            "Try the 'Send test email' button in Settings to verify your config."
-        )
-    except Exception as e:
-        raise EmailProviderError(f"SMTP error: {e}")
     finally:
-        _socket.setdefaulttimeout(old_timeout)
+        try:
+            server.quit()
+        except Exception:  # noqa: BLE001 — connection may already be gone
+            pass
+    return {"success": True, "provider": "smtp"}
 
 
-def send_via_sendgrid(settings: EmailSettingsModel, to_email: str, subject: str, html_body: str) -> dict:
+def send_via_sendgrid(settings: EmailSettingsModel, to_email: str, subject: str, html_body: str,
+                      attachments: Optional[Sequence[Attachment]] = None) -> dict:
     if not settings.sendgrid_api_key_encrypted or not settings.sendgrid_from_email:
-        raise EmailProviderError("SendGrid not properly configured")
-
+        raise EmailProviderError("SendGrid is not configured — add the API key and from-address in Settings.")
     api_key = decrypt(settings.sendgrid_api_key_encrypted)
+    payload = {
+        "personalizations": [{"to": [{"email": to_email}]}],
+        "from": {"email": settings.sendgrid_from_email},
+        "subject": subject,
+        "content": [
+            {"type": "text/plain", "value": html_to_text(html_body) or " "},
+            {"type": "text/html", "value": html_body},
+        ],
+    }
+    if attachments:
+        payload["attachments"] = [
+            {"content": base64.b64encode(data).decode(), "type": mime, "filename": name, "disposition": "attachment"}
+            for data, name, mime in attachments
+        ]
     resp = requests.post(
         "https://api.sendgrid.com/v3/mail/send",
         headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        json={
-            "personalizations": [{"to": [{"email": to_email}]}],
-            "from": {"email": settings.sendgrid_from_email},
-            "subject": subject,
-            "content": [{"type": "text/html", "value": html_body}],
-        },
+        json=payload, timeout=_HTTP_TIMEOUT,
     )
-    if resp.status_code not in [200, 202]:
+    if resp.status_code not in (200, 202):
         raise EmailProviderError(f"SendGrid API error: {resp.text}")
     return {"success": True, "provider": "sendgrid"}
 
 
-def _nl2br(text: str) -> str:
-    """Convert plain-text newlines to HTML <br> tags for email rendering."""
-    return text.replace("\r\n", "\n").replace("\n", "<br>\n")
+_PROVIDERS = {
+    "gmail": send_via_gmail,
+    "outlook": send_via_outlook,
+    "smtp": send_via_smtp,
+    "sendgrid": send_via_sendgrid,
+}
 
 
-def send_email_for_user(db: Session, user_id: int, to_email: str, subject: str, html_body: str) -> dict:
-    html_body = _nl2br(html_body)
-    settings = get_email_settings(db, user_id)
-    if not settings or settings.provider == "none":
-        raise EmailProviderError("No email provider configured. Please set up an email provider in Settings.")
-
-    if settings.provider == "gmail":
-        return send_via_gmail(settings, to_email, subject, html_body, db)
-    elif settings.provider == "outlook":
-        return send_via_outlook(settings, to_email, subject, html_body, db)
-    elif settings.provider == "smtp":
-        return send_via_smtp(settings, to_email, subject, html_body)
-    elif settings.provider == "sendgrid":
-        return send_via_sendgrid(settings, to_email, subject, html_body)
-    raise EmailProviderError(f"Unsupported email provider: {settings.provider}")
-
-
-def _build_mime_with_attachment(
-    from_email: str, to_email: str, subject: str, html_body: str,
-    attachments: list[tuple[bytes, str, str]],
-) -> MIMEMultipart:
-    """Build a MIME message with one or more attachments.
-
-    Each attachment is a (bytes, filename, mime_type) tuple.
-    """
-    message = MIMEMultipart("mixed")
-    message["From"] = from_email
-    message["To"] = to_email
-    message["Subject"] = subject
-    message.attach(MIMEText(html_body, "html"))
-    for att_bytes, att_filename, att_mime in attachments:
-        _maintype, subtype = att_mime.split("/", 1)
-        part = MIMEApplication(att_bytes, _subtype=subtype)
-        part.add_header("Content-Disposition", "attachment", filename=att_filename)
-        message.attach(part)
-    return message
-
-
-def send_email_with_attachments_for_user(
-    db: Session, user_id: int, to_email: str, subject: str, html_body: str,
-    attachments: list[tuple[bytes, str, str]],
+def deliver_email(
+    settings: Optional[EmailSettingsModel], to_email: str, subject: str, html_body: str,
+    attachments: Optional[Sequence[Attachment]] = None,
 ) -> dict:
-    """Send an email with one or more attachments.
+    """Send through the user's configured provider. Needs no DB session.
 
-    Each entry in *attachments* is a (bytes, filename, mime_type) tuple.
+    ``html_body`` should already have gone through ``prepare_body``.
+    Raises ``EmailProviderError`` for every failure mode.
     """
-    html_body = _nl2br(html_body)
-    settings = get_email_settings(db, user_id)
     if not settings or settings.provider == "none":
-        raise EmailProviderError("No email provider configured.")
-
-    if settings.provider == "gmail":
-        if settings.gmail_token_expiry and datetime.utcnow() >= settings.gmail_token_expiry:
-            access_token = refresh_gmail_token(settings, db)
-        else:
-            access_token = decrypt(settings.gmail_access_token)
-        message = _build_mime_with_attachment(
-            settings.gmail_email_address, to_email, subject, html_body, attachments)
-        raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
-        resp = requests.post(
-            "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
-            headers={"Authorization": f"Bearer {access_token}"},
-            json={"raw": raw_message})
-        if resp.status_code != 200:
-            raise EmailProviderError(f"Gmail API error: {resp.text}")
-        return {"success": True, "provider": "gmail"}
-
-    elif settings.provider == "outlook":
-        if settings.outlook_token_expiry and datetime.utcnow() >= settings.outlook_token_expiry:
-            access_token = refresh_outlook_token(settings, db)
-        else:
-            access_token = decrypt(settings.outlook_access_token)
-        outlook_attachments = [
-            {
-                "@odata.type": "#microsoft.graph.fileAttachment",
-                "name": att_filename,
-                "contentType": att_mime,
-                "contentBytes": base64.b64encode(att_bytes).decode(),
-            }
-            for att_bytes, att_filename, att_mime in attachments
-        ]
-        resp = requests.post(
-            "https://graph.microsoft.com/v1.0/me/sendMail",
-            headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
-            json={"message": {
-                "subject": subject,
-                "body": {"contentType": "HTML", "content": html_body},
-                "toRecipients": [{"emailAddress": {"address": to_email}}],
-                "attachments": outlook_attachments,
-            }})
-        if resp.status_code != 202:
-            raise EmailProviderError(f"Outlook error: {resp.text}")
-        return {"success": True, "provider": "outlook"}
-
-    elif settings.provider == "smtp":
-        smtp_password = decrypt(settings.smtp_password_encrypted)
-        message = _build_mime_with_attachment(
-            settings.smtp_from_email, to_email, subject, html_body, attachments)
-        if settings.smtp_use_tls:
-            server = smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15)
-            server.starttls()
-        else:
-            server = smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=15)
-        server.login(settings.smtp_username, smtp_password)
-        server.send_message(message)
-        server.quit()
-        return {"success": True, "provider": "smtp"}
-
-    elif settings.provider == "sendgrid":
-        api_key = decrypt(settings.sendgrid_api_key_encrypted)
-        sg_attachments = [
-            {
-                "content": base64.b64encode(att_bytes).decode(),
-                "type": att_mime,
-                "filename": att_filename,
-                "disposition": "attachment",
-            }
-            for att_bytes, att_filename, att_mime in attachments
-        ]
-        resp = requests.post(
-            "https://api.sendgrid.com/v3/mail/send",
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={
-                "personalizations": [{"to": [{"email": to_email}]}],
-                "from": {"email": settings.sendgrid_from_email},
-                "subject": subject,
-                "content": [{"type": "text/html", "value": html_body}],
-                "attachments": sg_attachments,
-            })
-        if resp.status_code not in [200, 202]:
-            raise EmailProviderError(f"SendGrid error: {resp.text}")
-        return {"success": True, "provider": "sendgrid"}
-
-    raise EmailProviderError(f"Unsupported provider: {settings.provider}")
+        raise EmailProviderError("No email provider configured. Set one up in Settings → Email.")
+    sender = _PROVIDERS.get(settings.provider)
+    if sender is None:
+        raise EmailProviderError(f"Unsupported email provider: {settings.provider}")
+    if not to_email or "@" not in to_email:
+        raise EmailProviderError(f"Invalid recipient address: {to_email!r}")
+    with _provider_errors(settings.provider, settings):
+        return sender(settings, to_email, subject, html_body, attachments)
 
 
-def send_email_with_attachment_for_user(
+def send_email_for_user(
     db: Session, user_id: int, to_email: str, subject: str, html_body: str,
-    attachment_bytes: bytes, attachment_filename: str, attachment_mime: str = "application/pdf",
+    attachments: Optional[Sequence[Attachment]] = None,
 ) -> dict:
-    """Backward-compatible wrapper — sends a single attachment."""
-    return send_email_with_attachments_for_user(
-        db, user_id, to_email, subject, html_body,
-        [(attachment_bytes, attachment_filename, attachment_mime)],
-    )
+    """Convenience wrapper for request handlers: load settings + signature, then deliver."""
+    settings = get_email_settings(db, user_id)
+    sig = db.query(EmailSignature).filter_by(user_id=user_id).first()
+    return deliver_email(settings, to_email, subject, prepare_body(html_body, sig), attachments)

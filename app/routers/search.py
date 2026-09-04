@@ -28,7 +28,7 @@ def _auto_scrape_emails(leads: list, db: Session) -> None:
     def _scrape(lead_id: str, website: str):
         try:
             candidates = extract_emails_from_website(website, timeout=5)
-            best = choose_best_email(candidates)
+            best = choose_best_email(candidates, own_domain=website)
             return (lead_id, best, candidates)
         except Exception:
             return (lead_id, None, [])

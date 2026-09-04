@@ -6,6 +6,16 @@
   <h1>Email outreach</h1>
 </div>
 
+{% set default_body %}Hi,
+
+I took a look at your website and put together a quick audit report with some findings that I think you'll find useful.
+
+I've attached the full report as a PDF — it covers page speed, mobile-friendliness, SEO, and security.
+
+Happy to chat if you'd like to discuss any of it.
+
+Best regards{% endset %}
+
 {% if is_bulk and bulk_leads %}
 {# ───── BULK / MAIL-MERGE MODE ───── #}
 {% set leads_with_email = bulk_leads | selectattr('email') | list %}
@@ -38,63 +48,8 @@
     </div>
   </details>
 </div>
+{% endif %}
 
-<div class="card">
-  <h2>Compose</h2>
-  <form id="email-form" style="margin-top:16px">
-    {% if attach_report %}
-    <input type="hidden" name="attach_report" value="1">
-    {% endif %}
-    <input type="hidden" name="lead_ids" id="email-lead-ids"
-           value="{{ bulk_leads | map(attribute='id') | join(',') }}">
-    <div class="form-group">
-      <label>Subject (use {{business_name}} and {{website}} as variables)</label>
-      <input type="text" name="subject" id="email-subject"
-             value="{% if attach_report %}Website Audit Report — {% raw %}{{business_name}}{% endraw %}{% endif %}">
-    </div>
-    <div class="form-group">
-      <label>Body (HTML supported, variables will be replaced per lead)</label>
-      <textarea name="body" id="email-body" rows="8">{% if attach_report %}Hi,
-
-I took a look at your website and put together a quick audit report with some findings that I think you'll find useful.
-
-I've attached the full report as a PDF — it covers page speed, mobile-friendliness, SEO, and security.
-
-Happy to chat if you'd like to discuss any of it.
-
-Best regards{% endif %}</textarea>
-    </div>
-    <div class="form-group">
-      <label>Attach file (optional, max 10 MB)</label>
-      <input type="file" name="attachment">
-    </div>
-    <div class="form-group">
-      <label>Send speed</label>
-      <select name="send_rate">
-        <option value="0">No limit (paid plan)</option>
-        <option value="100" selected>100/day (SendGrid free tier)</option>
-        <option value="500">500/day (Gmail / Workspace)</option>
-      </select>
-    </div>
-    <div style="display:flex;gap:8px;margin-top:12px">
-      <button type="button" class="btn btn-secondary btn-sm"
-              hx-post="/api/email/preview"
-              hx-include="#email-form"
-              hx-encoding="multipart/form-data"
-              hx-target="#email-preview">Preview</button>
-      <button type="button" class="btn btn-primary btn-sm"
-              hx-post="/api/email/send"
-              hx-include="#email-form"
-              hx-encoding="multipart/form-data"
-              hx-target="#email-status"
-              hx-confirm="Send mail merge to {{ leads_with_email | length }} lead{{ 's' if leads_with_email | length != 1 }}?">Send</button>
-    </div>
-    <div id="email-status" style="margin-top:12px"></div>
-  </form>
-</div>
-
-{% else %}
-{# ───── SINGLE / EMPTY COMPOSE MODE ───── #}
 <div class="card">
   <h2>Compose</h2>
   {% if attach_report and prefill_lead %}
@@ -103,65 +58,84 @@ Best regards{% endif %}</textarea>
   </div>
   {% endif %}
   <form id="email-form" style="margin-top:16px">
-    {% if attach_report and prefill_lead %}
+    {% if attach_report %}
     <input type="hidden" name="attach_report" value="1">
     {% endif %}
+
+    {% if is_bulk and bulk_leads %}
+    <input type="hidden" name="lead_ids" id="email-lead-ids"
+           value="{{ bulk_leads | map(attribute='id') | join(',') }}">
+    {% endif %}
+
+    <p class="subtext" style="margin-bottom:12px">
+      Merge fields: <code>{% raw %}{{business_name}}{% endraw %}</code>,
+      <code>{% raw %}{{website}}{% endraw %}</code>,
+      <code>{% raw %}{{city}}{% endraw %}</code>,
+      <code>{% raw %}{{score}}{% endraw %}</code> — replaced per lead in the subject and body.
+      Your saved signature is added automatically.
+    </p>
+
     <div class="form-group">
-      <label>Subject</label>
+      <label for="email-subject">Subject</label>
       <input type="text" name="subject" id="email-subject"
-             placeholder="Hi {{business_name}} — quick question"
-             value="{% if prefill_lead %}Website Audit Report — {{ prefill_lead.name }}{% endif %}">
+             placeholder="Hi {% raw %}{{business_name}}{% endraw %} — quick question"
+             value="{% if attach_report %}Website Audit Report — {% raw %}{{business_name}}{% endraw %}{% endif %}">
     </div>
     <div class="form-group">
-      <label>Body (HTML supported, use {{business_name}} and {{website}} as variables)</label>
-      <textarea name="body" id="email-body" rows="8" placeholder="Write your email...">{% if prefill_lead %}Hi,
-
-I took a look at your website and put together a quick audit report with some findings that I think you'll find useful.
-
-I've attached the full report as a PDF — it covers page speed, mobile-friendliness, SEO, and security.
-
-Happy to chat if you'd like to discuss any of it.
-
-Best regards{% endif %}</textarea>
+      <label for="email-body">Body (plain text or HTML)</label>
+      <textarea name="body" id="email-body" rows="8" placeholder="Write your email...">{% if attach_report %}{{ default_body }}{% endif %}</textarea>
     </div>
     <div class="form-group">
       <label>Attach file (optional, max 10 MB)</label>
       <input type="file" name="attachment">
     </div>
+
+    {% if not (is_bulk and bulk_leads) %}
     <div class="form-group">
-      <label>Lead IDs (comma separated)</label>
+      <label for="email-lead-ids">Lead IDs (comma separated)</label>
       <input type="text" name="lead_ids" id="email-lead-ids"
              placeholder="Select leads from the Leads page"
              value="{% if prefill_lead %}{{ prefill_lead.id }}{% endif %}">
     </div>
-    {% if prefill_lead %}
+    {% endif %}
+
+    <div class="form-group">
+      <label for="email-send-rate">Send speed</label>
+      <select name="send_rate" id="email-send-rate">
+        <option value="0" selected>Send now — all at once</option>
+        <option value="100">Slow — 100/day (one email every ~14 minutes)</option>
+        <option value="500">Medium — 500/day (one email every ~3 minutes)</option>
+      </select>
+      <p class="subtext" style="margin-top:4px">Slow speeds protect a new sending domain. Progress is saved — you can close this page and check back.</p>
+    </div>
+
+    {% if prefill_lead and not is_bulk %}
     <div style="display:flex;gap:8px;align-items:center">
-      <button type="button" class="btn btn-secondary btn-sm"
+      <button type="button" class="btn btn-secondary btn-sm" id="ai-write-btn"
               hx-post="/api/email/personalize"
-              hx-vals='{"lead_id":"{{ prefill_lead.id }}"}'
-              hx-target="#ai-fill-status"
-              hx-indicator="#ai-fill-status"
-              onclick="this.disabled=true;this.textContent='Generating...'">AI-write email</button>
+              hx-vals='{{ {"lead_id": prefill_lead.id} | tojson }}'
+              hx-swap="none"
+              onclick="this.disabled=true;this.textContent='Generating...'">AI-write email · 1 cr</button>
       <span id="ai-fill-status" class="subtext"></span>
     </div>
     <script>
     document.body.addEventListener('htmx:afterRequest', function(e){
-      if(e.detail.pathInfo && e.detail.pathInfo.requestPath==='/api/email/personalize'){
-        var btn=document.querySelector('[hx-post="/api/email/personalize"]');
-        if(btn){btn.disabled=false;btn.textContent='AI-write email';}
-        try{
-          var d=JSON.parse(e.detail.xhr.responseText);
-          if(d.subject)document.getElementById('email-subject').value=d.subject;
-          if(d.body)document.getElementById('email-body').value=d.body;
-          document.getElementById('ai-fill-status').innerHTML='<span class="saved-flash">Done</span>';
-        }catch(err){
-          document.getElementById('ai-fill-status').innerHTML='<span class="error-msg">Failed</span>';
-        }
-      }
+      if(!(e.detail.pathInfo && e.detail.pathInfo.requestPath==='/api/email/personalize')) return;
+      var btn=document.getElementById('ai-write-btn');
+      if(btn){btn.disabled=false;btn.textContent='AI-write email · 1 cr';}
+      var status=document.getElementById('ai-fill-status');
+      var d=null;
+      try{ d=JSON.parse(e.detail.xhr.responseText); }catch(err){ d=null; }
+      if(!d){ status.innerHTML='<span class="error-msg">Request failed ('+e.detail.xhr.status+')</span>'; return; }
+      if(d.error){ status.innerHTML='<span class="error-msg"></span>'; status.firstChild.textContent=d.error; return; }
+      if(d.subject)document.getElementById('email-subject').value=d.subject;
+      if(d.body)document.getElementById('email-body').value=d.body;
+      status.innerHTML='<span class="saved-flash">Done</span>';
     });
     </script>
     {% endif %}
-    <div style="display:flex;gap:8px;margin-top:12px">
+
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
       <button type="button" class="btn btn-secondary btn-sm"
               hx-post="/api/email/preview"
               hx-include="#email-form"
@@ -172,47 +146,49 @@ Best regards{% endif %}</textarea>
               hx-include="#email-form"
               hx-encoding="multipart/form-data"
               hx-target="#email-status"
-              hx-confirm="Send email to selected leads?">Send</button>
+              {% if is_bulk and bulk_leads %}
+              hx-confirm="Send mail merge to {{ leads_with_email | length }} lead{{ 's' if leads_with_email | length != 1 }}?"
+              {% else %}
+              hx-confirm="Send email to selected leads?"
+              {% endif %}>Send</button>
     </div>
-    <span id="email-status" style="margin-left:12px"></span>
+    <div id="email-status" style="margin-top:12px"></div>
   </form>
 </div>
-{% endif %}
 
 <div id="email-preview" style="margin-top:16px"></div>
 
 <div class="card" style="margin-top:32px">
   <h2>Signature</h2>
-  <form hx-post="/api/email/signatures" hx-target="#sig-status" hx-swap="innerHTML" style="margin-top:16px">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <div class="form-group">
-        <label>Full Name</label>
-        <input type="text" name="full_name">
-      </div>
-      <div class="form-group">
-        <label>Position</label>
-        <input type="text" name="position">
-      </div>
-    </div>
-    <div class="form-group">
-      <label>Company Name</label>
-      <input type="text" name="company_name">
-    </div>
-    <div class="form-group">
-      <label>Base Pitch (used for AI personalization)</label>
-      <textarea name="base_pitch" rows="3" placeholder="We help local businesses get more customers through modern websites..."></textarea>
-    </div>
-    <button type="submit" class="btn btn-primary btn-sm">Save signature</button>
-    <span id="sig-status" style="margin-left:12px"></span>
-  </form>
+  <p class="subtext">Appended to every email. Company name and website also brand the audit-report PDF.</p>
+  <div id="signature-form" hx-get="/api/email/signature-form" hx-trigger="load" hx-swap="innerHTML">
+    <span class="htmx-indicator">Loading...</span>
+  </div>
 </div>
 
 <div class="card" style="margin-top:32px">
   <div class="section-header">
     <h2>Saved templates</h2>
   </div>
-  <div id="template-list" hx-get="/api/email/templates" hx-trigger="load" hx-swap="innerHTML">
+  <form hx-post="/api/email/templates" hx-target="#template-list" hx-swap="innerHTML"
+        hx-include="#email-subject, #email-body"
+        style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:12px">
+    <div class="form-group" style="flex:1;min-width:200px;margin:0">
+      <label for="template-name">Save the current subject &amp; body as</label>
+      <input type="text" name="name" id="template-name" placeholder="e.g. Audit follow-up" required>
+    </div>
+    <button type="submit" class="btn btn-secondary btn-sm">Save as template</button>
+  </form>
+  <div id="template-list" hx-get="/api/email/templates" hx-trigger="load" hx-swap="innerHTML" style="margin-top:16px">
     <span class="htmx-indicator">Loading...</span>
   </div>
 </div>
+
+<script>
+function useTemplate(btn){
+  document.getElementById('email-subject').value = btn.dataset.subject || '';
+  document.getElementById('email-body').value = btn.dataset.body || '';
+  document.getElementById('email-subject').scrollIntoView({behavior:'smooth', block:'center'});
+}
+</script>
 {% endblock %}

@@ -1,41 +1,40 @@
+import html
 import logging
-import threading
-import time
-import uuid as _uuid
-from datetime import datetime, timezone
+from typing import Optional
 
-_CACHE_TTL = 3600  # 1 hour
-_CACHE_MAX = 200
-
-from fastapi import APIRouter, Request, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy.orm import Session
 
-from app.deps import get_db, get_current_user
-from app.models import User, Lead, EmailSignature, EmailTemplate
+from app.deps import get_current_user, get_db
+from app.models import EmailSignature, EmailTemplate, Lead, SendJob
 from app.services.credits import credit_manager
-from app.services.email_senders import (
-    send_email_for_user,
-    send_email_with_attachments_for_user,
-    EmailProviderError,
-)
+from app.services.email_senders import signature_html
+from app.services.merge_fields import lead_merge_fields, render_merge_fields
+from app.services.send_jobs import cancel_job, create_send_job, job_progress, notify_worker
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["email"])
 
-# In-memory batch send status tracker (mirrors scoring.py pattern)
-_send_status: dict[str, dict] = {}
+_MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024  # 10 MB
+_ALLOWED_RATES = {0, 100, 500}
 
 
-def _evict_old_status():
-    now = time.time()
-    stale = [k for k, v in _send_status.items() if now - v.get("_created", 0) > _CACHE_TTL]
-    for k in stale:
-        _send_status.pop(k, None)
-    # Hard cap
-    while len(_send_status) > _CACHE_MAX:
-        _send_status.pop(next(iter(_send_status)), None)
+def _error(message: str, status_code: int = 200) -> HTMLResponse:
+    """HTMX 2 does not swap 4xx/5xx bodies, so user-facing errors go back as 200."""
+    return HTMLResponse(f'<div class="error-msg">{html.escape(message)}</div>', status_code=status_code)
 
+
+def _user_leads(db: Session, user_id: int, lead_ids: str, limit: Optional[int] = None) -> list[Lead]:
+    ids = [lid.strip() for lid in lead_ids.split(",") if lid.strip()]
+    if limit:
+        ids = ids[:limit]
+    if not ids:
+        return []
+    return db.query(Lead).filter(Lead.id.in_(ids), Lead.user_id == user_id).all()
+
+
+# --- Compose ---------------------------------------------------------------------
 
 @router.post("/api/email/preview")
 def preview_emails(
@@ -45,109 +44,27 @@ def preview_emails(
     lead_ids: str = Form(""),
     db: Session = Depends(get_db),
 ):
-    templates = request.app.state.templates
     user = get_current_user(request, db)
-    ids = [lid.strip() for lid in lead_ids.split(",") if lid.strip()][:5]
-    leads = db.query(Lead).filter(Lead.id.in_(ids), Lead.user_id == user.id).all() if ids else []
+    leads = _user_leads(db, user.id, lead_ids, limit=5)
+    sig = db.query(EmailSignature).filter_by(user_id=user.id).first()
 
     previews = []
     for lead in leads:
-        rendered_subject = subject.replace("{{business_name}}", lead.name or "")
-        rendered_body = body.replace("{{business_name}}", lead.name or "").replace("{{website}}", lead.website or "")
-        previews.append({"lead": lead, "subject": rendered_subject, "body": rendered_body})
+        fields = lead_merge_fields(lead)
+        previews.append({
+            "lead": lead,
+            "subject": render_merge_fields(subject, fields),
+            "body": render_merge_fields(body, fields),
+        })
 
-    return templates.TemplateResponse(
+    return request.app.state.templates.TemplateResponse(
         "partials/email_preview.html",
-        {"request": request, "previews": previews},
+        {"request": request, "previews": previews, "signature_html": signature_html(sig)},
     )
 
 
-def _batch_send_worker(
-    lead_ids: list[str], user_id: int, send_id: str,
-    subject: str, body: str, attach_report: bool,
-    custom_attachment: tuple[bytes, str, str] | None = None,
-    send_rate: int = 0,
-):
-    """Background thread that sends emails one by one (with optional PDF and/or custom file)."""
-    from app.database import SessionLocal
-
-    db = SessionLocal()
-    status = _send_status[send_id]
-
-    # Calculate delay between emails based on daily rate limit
-    # e.g. 100/day = 1 email per 864 seconds, 500/day = 1 per 172.8s
-    delay = (86400.0 / send_rate) if send_rate > 0 else 0
-
-    try:
-        leads = db.query(Lead).filter(Lead.id.in_(lead_ids), Lead.user_id == user_id).all()
-        leads_with_email = [l for l in leads if l.email]
-        skipped = len(leads) - len(leads_with_email)
-        status["skipped"] = skipped
-        status["total"] = len(leads_with_email) + skipped
-
-        for i, lead in enumerate(leads_with_email):
-            # Rate limiting: sleep between sends (skip delay before first email)
-            if delay > 0 and i > 0:
-                status["waiting_until"] = time.time() + delay
-                time.sleep(delay)
-                status.pop("waiting_until", None)
-            rendered_subject = subject.replace("{{business_name}}", lead.name or "")
-            rendered_body = body.replace("{{business_name}}", lead.name or "").replace("{{website}}", lead.website or "")
-
-            ok, balance = credit_manager.deduct_credits(db, user_id, "email_send", description=f"Email to {lead.email}")
-            if not ok:
-                status["failed"] += 1
-                status["errors"].append(f"Insufficient credits ({balance} available)")
-                status["status"] = "completed"
-                return
-
-            try:
-                attachments: list[tuple[bytes, str, str]] = []
-                if custom_attachment:
-                    attachments.append(custom_attachment)
-                if attach_report and lead.score is not None:
-                    from app.services.client_report import generate_client_report
-                    from app.services.pdf_report import generate_client_pdf
-
-                    lead_data = {
-                        "name": lead.name, "website": lead.website,
-                        "score": lead.score or 0, "email": lead.email or "",
-                        "phone": lead.phone or "", "address": lead.address or "",
-                        "heuristic_score": lead.heuristic_score or 0,
-                        "ai_score": lead.ai_score or 0,
-                        "score_breakdown": lead.score_breakdown,
-                        "technographics": lead.technographics,
-                    }
-                    report = generate_client_report(lead_data)
-                    pdf_bytes = generate_client_pdf(report)
-                    filename = f"audit-report-{(lead.name or 'report').replace(' ', '-').lower()}.pdf"
-                    attachments.append((pdf_bytes, filename, "application/pdf"))
-
-                if attachments:
-                    send_email_with_attachments_for_user(
-                        db, user_id, lead.email, rendered_subject, rendered_body,
-                        attachments=attachments,
-                    )
-                else:
-                    send_email_for_user(db, user_id, lead.email, rendered_subject, rendered_body)
-                lead.last_emailed_at = datetime.now(timezone.utc)
-                lead.emails_sent_count = (lead.emails_sent_count or 0) + 1
-                db.commit()
-                status["sent"] += 1
-            except Exception as e:
-                logger.error(f"Batch email error for {lead.name}: {e}")
-                status["failed"] += 1
-                status["errors"].append(f"{lead.name}: {e}")
-    finally:
-        db.close()
-        status["status"] = "completed"
-
-
-_MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024  # 10 MB
-
-
 @router.post("/api/email/send")
-async def send_emails(
+def send_emails(
     request: Request,
     subject: str = Form(...),
     body: str = Form(...),
@@ -157,149 +74,76 @@ async def send_emails(
     attachment: UploadFile = File(None),
     db: Session = Depends(get_db),
 ):
-    templates = request.app.state.templates
-    user = get_current_user(request, db)
-    ids = [lid.strip() for lid in lead_ids.split(",") if lid.strip()]
-    leads = db.query(Lead).filter(Lead.id.in_(ids), Lead.user_id == user.id).all() if ids else []
+    """Create a SendJob; the background worker does the actual sending.
 
+    Deliberately a plain ``def``: FastAPI runs it in the threadpool, so reading
+    the upload and the DB writes never block the event loop.
+    """
+    user = get_current_user(request, db)
+    if not subject.strip() or not body.strip():
+        return _error("Subject and body are required.")
+
+    leads = _user_leads(db, user.id, lead_ids)
     leads_with_email = [l for l in leads if l.email]
     if not leads_with_email:
-        return HTMLResponse('<div class="error-msg">No leads with email addresses selected</div>')
+        return _error("No leads with email addresses selected.")
 
-    # Check credits
     has, balance, cost = credit_manager.has_sufficient_credits(db, user.id, "email_send", len(leads_with_email))
     if not has:
-        return HTMLResponse(f'<div class="error-msg">Insufficient credits. Need {cost}, have {balance}</div>')
+        return _error(f"Insufficient credits. Need {cost}, have {balance}.")
 
-    # Read custom attachment (UploadFile is not thread-safe, read now)
-    custom_attachment: tuple[bytes, str, str] | None = None
+    custom_attachment = None
     if attachment and attachment.filename:
-        file_bytes = await attachment.read()
+        file_bytes = attachment.file.read()
         if len(file_bytes) > _MAX_ATTACHMENT_SIZE:
-            return HTMLResponse('<div class="error-msg">Attachment too large (max 10 MB)</div>')
+            return _error("Attachment too large (max 10 MB).")
         custom_attachment = (file_bytes, attachment.filename, attachment.content_type or "application/octet-stream")
 
-    use_report = attach_report == "1"
+    if send_rate not in _ALLOWED_RATES:
+        send_rate = 0
 
-    # For large batches or rate-limited sends, use background thread
-    if len(leads_with_email) > 3 or send_rate > 0:
-        send_id = str(_uuid.uuid4())[:8]
-        # Evict stale entries before adding new one
-        _evict_old_status()
-        _send_status[send_id] = {
-            "status": "in_progress",
-            "total": len(leads),
-            "sent": 0,
-            "failed": 0,
-            "skipped": 0,
-            "errors": [],
-            "send_rate": send_rate,
-            "user_id": user.id,
-            "_created": time.time(),
-        }
-        thread = threading.Thread(
-            target=_batch_send_worker,
-            args=([l.id for l in leads], user.id, send_id, subject, body, use_report),
-            kwargs={"custom_attachment": custom_attachment, "send_rate": send_rate},
-            daemon=True,
-        )
-        thread.start()
+    job = create_send_job(
+        db, user.id, leads, subject, body,
+        attach_report=(attach_report == "1"),
+        attachment=custom_attachment,
+        send_rate_per_day=send_rate,
+    )
+    notify_worker()
 
-        return templates.TemplateResponse(
-            "partials/send_progress.html",
-            {"request": request, "send_id": send_id, "status": _send_status[send_id]},
-        )
-
-    # Synchronous send for small batches
-    sent = 0
-    errors = []
-    for lead in leads_with_email:
-        rendered_subject = subject.replace("{{business_name}}", lead.name or "")
-        rendered_body = body.replace("{{business_name}}", lead.name or "").replace("{{website}}", lead.website or "")
-        try:
-            attachments: list[tuple[bytes, str, str]] = []
-            if custom_attachment:
-                attachments.append(custom_attachment)
-            if use_report and lead.score is not None:
-                from app.services.client_report import generate_client_report
-                from app.services.pdf_report import generate_client_pdf
-                lead_data = {
-                    "name": lead.name, "website": lead.website,
-                    "score": lead.score or 0, "email": lead.email or "",
-                    "phone": lead.phone or "", "address": lead.address or "",
-                    "heuristic_score": lead.heuristic_score or 0,
-                    "ai_score": lead.ai_score or 0,
-                    "score_breakdown": lead.score_breakdown,
-                    "technographics": lead.technographics,
-                }
-                report = generate_client_report(lead_data)
-                pdf_bytes = generate_client_pdf(report)
-                filename = f"audit-report-{(lead.name or 'report').replace(' ', '-').lower()}.pdf"
-                attachments.append((pdf_bytes, filename, "application/pdf"))
-
-            if attachments:
-                send_email_with_attachments_for_user(
-                    db, user.id, lead.email, rendered_subject, rendered_body,
-                    attachments=attachments,
-                )
-            else:
-                send_email_for_user(db, user.id, lead.email, rendered_subject, rendered_body)
-            credit_manager.deduct_credits(db, user.id, "email_send", 1, f"Email to {lead.email}")
-            lead.last_emailed_at = datetime.now(timezone.utc)
-            lead.emails_sent_count = (lead.emails_sent_count or 0) + 1
-            db.commit()
-            sent += 1
-        except EmailProviderError as e:
-            errors.append(f"{lead.name}: {e}")
-        except Exception as e:
-            logger.error(f"Email send error for {lead.name}: {e}")
-            errors.append(f"{lead.name}: {e}")
-
-    msg = f"Sent {sent} email{'s' if sent != 1 else ''}"
-    if use_report or custom_attachment:
-        msg += " with attachment"
-    if errors:
-        msg += f". {len(errors)} failed."
-    return HTMLResponse(f'<span class="saved-flash">{msg}</span>')
-
-
-@router.get("/api/email/send/{send_id}/status")
-def send_status(send_id: str, request: Request, db: Session = Depends(get_db)):
-    user = get_current_user(request, db)
-    templates = request.app.state.templates
-
-    status = _send_status.get(send_id)
-    if not status or status.get("user_id") != user.id:
-        return HTMLResponse('<span class="subtext">Send batch not found.</span>')
-
-    return templates.TemplateResponse(
+    return request.app.state.templates.TemplateResponse(
         "partials/send_progress.html",
-        {"request": request, "send_id": send_id, "status": status},
+        {"request": request, "job": job, "status": job_progress(db, job)},
     )
 
 
-@router.post("/api/email/send-single")
-def send_single_email(
-    request: Request,
-    lead_id: str = Form(...),
-    subject: str = Form(...),
-    body: str = Form(...),
-    db: Session = Depends(get_db),
-):
-    user = get_current_user(request, db)
-    lead = db.query(Lead).filter(Lead.id == lead_id, Lead.user_id == user.id).first()
-    if not lead or not lead.email:
-        return HTMLResponse('<div class="error-msg">Lead not found or has no email</div>')
+def _load_job(db: Session, job_id: str, user_id: int) -> Optional[SendJob]:
+    return db.query(SendJob).filter(SendJob.id == job_id, SendJob.user_id == user_id).first()
 
-    try:
-        send_email_for_user(db, user.id, lead.email, subject, body)
-        credit_manager.deduct_credits(db, user.id, "email_send", 1, f"Email to {lead.email}")
-        lead.last_emailed_at = datetime.now(timezone.utc)
-        lead.emails_sent_count = (lead.emails_sent_count or 0) + 1
-        db.commit()
-        return HTMLResponse('<span class="saved-flash">Email sent</span>')
-    except EmailProviderError as e:
-        return HTMLResponse(f'<div class="error-msg">{e}</div>')
+
+@router.get("/api/email/send/{job_id}/status")
+def send_status(job_id: str, request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    job = _load_job(db, job_id, user.id)
+    if not job:
+        return HTMLResponse('<span class="subtext">Send job not found.</span>')
+    return request.app.state.templates.TemplateResponse(
+        "partials/send_progress.html",
+        {"request": request, "job": job, "status": job_progress(db, job)},
+    )
+
+
+@router.post("/api/email/send/{job_id}/cancel")
+def send_cancel(job_id: str, request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    job = _load_job(db, job_id, user.id)
+    if not job:
+        return HTMLResponse('<span class="subtext">Send job not found.</span>')
+    if job.status in ("queued", "running"):
+        cancel_job(db, job)
+    return request.app.state.templates.TemplateResponse(
+        "partials/send_progress.html",
+        {"request": request, "job": job, "status": job_progress(db, job)},
+    )
 
 
 @router.post("/api/email/personalize")
@@ -318,94 +162,103 @@ def personalize_email(
     if not has:
         return JSONResponse({"error": f"Insufficient credits. Need {cost}, have {balance}"}, status_code=400)
 
-    # Get user's base pitch from signature if not provided
     if not base_pitch:
         sig = db.query(EmailSignature).filter_by(user_id=user.id).first()
         base_pitch = sig.base_pitch if sig else ""
-
     if not base_pitch:
-        return JSONResponse({"error": "Please set a base pitch in your email signature settings"}, status_code=400)
+        return JSONResponse({"error": "Add a base pitch to your signature first (below), then try again."}, status_code=400)
 
     from app.services.ai_email import generate_personalized_email
-    result = generate_personalized_email(
-        {"name": lead.name, "website": lead.website, "score": lead.score},
-        base_pitch,
-    )
+
+    try:
+        result = generate_personalized_email(
+            {"name": lead.name, "website": lead.website, "score": lead.score},
+            base_pitch,
+        )
+    except Exception as exc:  # noqa: BLE001 — provider errors become a message, not a 500
+        logger.warning("[email] AI personalise failed for lead %s: %s", lead.id, exc)
+        return JSONResponse({"error": f"AI writing failed: {exc}"}, status_code=502)
+
     credit_manager.deduct_credits(db, user.id, "email_personalization", 1, f"AI email for {lead.name}")
-    return JSONResponse(result)
+    return JSONResponse(result, headers={"HX-Trigger": "creditsChanged"})
 
 
-# --- Signatures ---
+# --- Signature ---------------------------------------------------------------------
 
-@router.get("/api/email/signatures")
-def get_signature(request: Request, db: Session = Depends(get_db)):
+@router.get("/api/email/signature-form")
+def signature_form(request: Request, db: Session = Depends(get_db)):
+    """Pre-filled signature form (the /email page pulls this in with hx-get)."""
     user = get_current_user(request, db)
     sig = db.query(EmailSignature).filter_by(user_id=user.id).first()
-    if not sig:
-        return JSONResponse({"full_name": "", "position": "", "company_name": "", "phone": "", "website": "", "base_pitch": ""})
-    return JSONResponse({
-        "full_name": sig.full_name or "",
-        "position": sig.position or "",
-        "company_name": sig.company_name or "",
-        "phone": sig.phone or "",
-        "website": sig.website or "",
-        "base_pitch": sig.base_pitch or "",
-        "use_custom": sig.use_custom,
-        "custom_signature": sig.custom_signature or "",
-    })
+    return request.app.state.templates.TemplateResponse(
+        "partials/signature_form.html",
+        {"request": request, "sig": sig, "saved": False},
+    )
 
 
 @router.post("/api/email/signatures")
 def save_signature(
     request: Request,
-    full_name: str = Form(""),
-    position: str = Form(""),
-    company_name: str = Form(""),
-    phone: str = Form(""),
-    website: str = Form(""),
-    base_pitch: str = Form(""),
+    full_name: Optional[str] = Form(None),
+    position: Optional[str] = Form(None),
+    company_name: Optional[str] = Form(None),
+    phone: Optional[str] = Form(None),
+    website: Optional[str] = Form(None),
+    base_pitch: Optional[str] = Form(None),
     db: Session = Depends(get_db),
 ):
+    """Update only the fields that were actually submitted."""
     user = get_current_user(request, db)
     sig = db.query(EmailSignature).filter_by(user_id=user.id).first()
     if not sig:
         sig = EmailSignature(user_id=user.id)
         db.add(sig)
-    sig.full_name = full_name
-    sig.position = position
-    sig.company_name = company_name
-    sig.phone = phone
-    sig.website = website
-    sig.base_pitch = base_pitch
+    for field, value in (
+        ("full_name", full_name), ("position", position), ("company_name", company_name),
+        ("phone", phone), ("website", website), ("base_pitch", base_pitch),
+    ):
+        if value is not None:
+            setattr(sig, field, value.strip())
     db.commit()
-    return HTMLResponse('<span class="saved-flash">Signature saved</span>')
+    return request.app.state.templates.TemplateResponse(
+        "partials/signature_form.html",
+        {"request": request, "sig": sig, "saved": True},
+    )
 
 
-# --- Templates ---
+# --- Templates -------------------------------------------------------------------
+
+def _template_list(request: Request, db: Session, user_id: int, flash: str = ""):
+    items = db.query(EmailTemplate).filter_by(user_id=user_id).order_by(EmailTemplate.created_at.desc()).all()
+    return request.app.state.templates.TemplateResponse(
+        "partials/template_list.html",
+        {"request": request, "templates": items, "flash": flash},
+    )
+
 
 @router.get("/api/email/templates")
 def list_templates(request: Request, db: Session = Depends(get_db)):
     user = get_current_user(request, db)
-    templates_list = db.query(EmailTemplate).filter_by(user_id=user.id).order_by(EmailTemplate.created_at.desc()).all()
-    return JSONResponse([
-        {"id": t.id, "name": t.name, "subject": t.subject, "body": t.body}
-        for t in templates_list
-    ])
+    return _template_list(request, db, user.id)
 
 
 @router.post("/api/email/templates")
 def save_template(
     request: Request,
-    name: str = Form(...),
+    name: str = Form(""),
     subject: str = Form(""),
     body: str = Form(""),
     db: Session = Depends(get_db),
 ):
     user = get_current_user(request, db)
-    tpl = EmailTemplate(user_id=user.id, name=name, subject=subject, body=body)
-    db.add(tpl)
+    name = name.strip()
+    if not name:
+        return _template_list(request, db, user.id, flash="Give the template a name.")
+    if not subject.strip() and not body.strip():
+        return _template_list(request, db, user.id, flash="Write a subject or body first, then save it.")
+    db.add(EmailTemplate(user_id=user.id, name=name[:255], subject=subject, body=body))
     db.commit()
-    return HTMLResponse('<span class="saved-flash">Template saved</span>')
+    return _template_list(request, db, user.id, flash="Template saved.")
 
 
 @router.delete("/api/email/templates/{template_id}")
@@ -415,4 +268,4 @@ def delete_template(template_id: int, request: Request, db: Session = Depends(ge
     if tpl:
         db.delete(tpl)
         db.commit()
-    return HTMLResponse('<span class="saved-flash">Deleted</span>')
+    return _template_list(request, db, user.id, flash="Template deleted.")

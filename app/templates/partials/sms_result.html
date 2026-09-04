@@ -1,0 +1,15 @@
+{# Context: results (list of {lead, ok, to_phone?, error?}), sent (int), failed (int) #}
+<div class="card card-compact">
+  <div>
+    <span class="{{ 'saved-flash' if sent else 'subtext' }}">Sent {{ sent }} SMS</span>
+    {% if failed %}<span class="error-msg" style="margin-left:8px">{{ failed }} failed</span>{% endif %}
+  </div>
+  {% set failures = results | rejectattr('ok') | list %}
+  {% if failures %}
+  <div style="margin-top:8px;font-size:.82rem;color:var(--red)">
+    {% for r in failures %}
+    <div><strong>{{ r.lead.name }}</strong>: {{ r.error }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>

@@ -1,17 +1,17 @@
 {% if transactions %}
-<div class="card" style="padding:0">
+<div class="card card-flush">
   {% for t in transactions %}
-  <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 24px;border-bottom:1px solid #f3f4f6">
-    <div>
-      <span style="font-size:.87rem">{{ t.description }}</span>
-      <div class="subtext" style="font-size:.75rem">{{ t.created_at[:10] }}</div>
+  <div class="tx-row">
+    <div class="flex-1">
+      <span class="tx-desc">{{ t.description }}</span>
+      <div class="subtext">{{ t.created_at[:10] }}</div>
     </div>
-    <span style="font-family:var(--mono);font-weight:600;font-size:.87rem;{{ 'color:var(--green)' if t.amount > 0 else 'color:var(--red)' }}">
+    <span class="tx-amount {{ 'amount-pos' if t.amount > 0 else 'amount-neg' }}">
       {{ '+' if t.amount > 0 }}{{ t.amount }}
     </span>
   </div>
   {% endfor %}
 </div>
 {% else %}
-<p class="subtext">No transactions yet.</p>
+<p class="subtext">No transactions yet. Credits you buy and spend will show up here.</p>
 {% endif %}

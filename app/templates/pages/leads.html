@@ -1,39 +1,58 @@
 {% extends "base.html" %}
 {% block title %}Leads — LeadBlitz{% endblock %}
+{% block container_class %}container container-wide{% endblock %}
 
 {% block content %}
+{# Every current filter, passed to the "all filtered" bulk actions so they act on exactly what is shown #}
+{% set filters = {
+  "q": search_query or "",
+  "has_email": email_filter or "",
+  "scored": scored_filter or "",
+  "stage": stage_filter or "",
+  "campaign_id": campaign_filter or "",
+  "import_id": import_filter or ""
+} %}
+{% set filters_json = filters | tojson %}
+{% set email_all_json = dict(filters, attach_report="0") | tojson %}
+{% set has_filters = search_query or email_filter or scored_filter or stage_filter or campaign_filter or import_filter %}
+
 <div class="section-header">
-  <h1>Leads <span class="subtext" style="font-size:.87rem;font-weight:400">{{ total_leads }} total</span></h1>
-  <div style="display:flex;gap:8px;align-items:center">
-    <button class="btn btn-secondary btn-sm"
+  <h1>Leads <span class="h1-count" id="lead-total">{{ total_leads }} {{ 'matching' if has_filters else 'total' }}</span></h1>
+  <div class="row">
+    <button class="btn btn-secondary btn-sm" type="button"
             hx-post="/api/leads/email-all"
-            hx-vals='{ {% if campaign_filter %}"campaign_id":"{{ campaign_filter }}",{% endif %}{% if import_filter %}"import_id":"{{ import_filter }}",{% endif %}{% if stage_filter %}"stage":"{{ stage_filter }}",{% endif %}"attach_report":"0" }'
-            hx-swap="none">Email all filtered</button>
-    <button class="btn btn-secondary btn-sm"
+            hx-vals='{{ email_all_json }}'
+            hx-target="#bulk-status" hx-swap="innerHTML"
+            hx-confirm="Open the mail-merge composer for every lead with an email address in the current view ({{ total_leads }} lead{{ 's' if total_leads != 1 }} match the filters)?"
+            title="Compose one email to every filtered lead that has an address">Email all filtered</button>
+    <button class="btn btn-secondary btn-sm" type="button"
             hx-post="/api/enrich/batch"
-            {% if campaign_filter %}hx-vals='{"campaign_id":"{{ campaign_filter }}"}'{% endif %}
-            hx-target="#enrich-progress"
-            hx-swap="innerHTML">Find all emails</button>
-    <button class="btn btn-primary btn-sm"
+            hx-vals='{{ filters_json }}'
+            hx-target="#enrich-progress" hx-swap="innerHTML"
+            title="Scrape each filtered lead's website for an email address. Free.">Find all emails <span class="cost">· free</span></button>
+    <button class="btn btn-primary btn-sm" type="button" id="score-all-btn"
             hx-post="/api/score/batch"
-            {% if campaign_filter %}hx-vals='{"campaign_id":"{{ campaign_filter }}"}'{% endif %}
-            hx-target="#batch-progress"
-            hx-swap="innerHTML">Score all unscored</button>
+            hx-vals='{{ filters_json }}'
+            hx-target="#batch-progress" hx-swap="innerHTML"
+            hx-confirm="Score every unscored lead matching the current filters? This costs 1 credit per lead."
+            title="Score every unscored lead in the current view · 1 credit each">Score all unscored <span class="cost">· 1 cr each</span></button>
     <div class="more-menu">
-      <button class="btn btn-secondary btn-sm more-menu-toggle" type="button">&#8943;</button>
-      <div class="more-menu-dropdown">
+      <button class="btn btn-secondary btn-sm more-menu-toggle" type="button" aria-label="More actions" aria-haspopup="true" aria-expanded="false" aria-controls="more-menu-dropdown">&#8943;</button>
+      <div class="more-menu-dropdown" id="more-menu-dropdown">
         <a href="/import">Import CSV</a>
         <a href="/api/csv/export">Export CSV</a>
+        <a href="/campaigns">Campaigns</a>
       </div>
     </div>
   </div>
 </div>
 
-<div class="filter-bar">
-  <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:.87rem;color:var(--muted)">
+<div class="filter-bar" role="search" aria-label="Filter leads">
+  <label class="check-label" for="select-all">
     <input type="checkbox" id="select-all" onchange="toggleSelectAll(this.checked)"> Select all
   </label>
-  <select onchange="filterLeads('stage', this.value)">
+  <label class="sr-only" for="filter-stage">Stage</label>
+  <select id="filter-stage" onchange="filterLeads('stage', this.value)">
     <option value="" {{ 'selected' if not stage_filter }}>All stages</option>
     <option value="new" {{ 'selected' if stage_filter == 'new' }}>New</option>
     <option value="reviewing" {{ 'selected' if stage_filter == 'reviewing' }}>Reviewing</option>
@@ -41,7 +60,8 @@
     <option value="rejected" {{ 'selected' if stage_filter == 'rejected' }}>Rejected</option>
   </select>
   {% if campaigns %}
-  <select onchange="filterLeads('campaign_id', this.value)">
+  <label class="sr-only" for="filter-campaign">Campaign</label>
+  <select id="filter-campaign" onchange="filterLeads('campaign_id', this.value)">
     <option value="">All campaigns</option>
     {% for c in campaigns %}
     <option value="{{ c.id }}" {{ 'selected' if campaign_filter == c.id }}>{{ c.business_type }} in {{ c.location }}</option>
@@ -49,60 +69,87 @@
   </select>
   {% endif %}
   {% if imports %}
-  <select onchange="filterLeads('import_id', this.value)">
+  <label class="sr-only" for="filter-import">Import</label>
+  <select id="filter-import" onchange="filterLeads('import_id', this.value)">
     <option value="">All imports</option>
     {% for imp in imports %}
     <option value="{{ imp.id }}" {{ 'selected' if import_filter == imp.id }}>{{ imp.filename }} ({{ imp.to_score }})</option>
     {% endfor %}
   </select>
   {% endif %}
-  <select onchange="filterLeads('has_email', this.value)">
-    <option value="" {{ 'selected' if not email_filter }}>All leads</option>
+  <label class="sr-only" for="filter-email">Email</label>
+  <select id="filter-email" onchange="filterLeads('has_email', this.value)">
+    <option value="" {{ 'selected' if not email_filter }}>Email: any</option>
     <option value="1" {{ 'selected' if email_filter == '1' }}>Has email</option>
     <option value="0" {{ 'selected' if email_filter == '0' }}>No email</option>
   </select>
-  <input type="text" placeholder="Search leads..." value="{{ search_query or '' }}"
-         style="flex:1;min-width:150px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:.87rem"
+  <label class="sr-only" for="filter-scored">Scored</label>
+  <select id="filter-scored" onchange="filterLeads('scored', this.value)">
+    <option value="" {{ 'selected' if not scored_filter }}>Score: any</option>
+    <option value="1" {{ 'selected' if scored_filter == '1' }}>Scored only</option>
+  </select>
+  <label class="sr-only" for="filter-q">Search leads</label>
+  <input type="search" id="filter-q" class="filter-search" placeholder="Search name, email, phone, address…" value="{{ search_query or '' }}"
          onkeydown="if(event.key==='Enter'){filterLeads('q', this.value)}">
+  {% if has_filters %}<a href="/leads" class="btn btn-secondary btn-sm">Clear filters</a>{% endif %}
 </div>
 
-<div id="bulk-bar" class="bulk-bar" style="display:none">
+<div id="bulk-bar" class="bulk-bar" hidden>
   <div class="bulk-bar-inner">
-    <span id="bulk-count" style="font-weight:600">0 selected</span>
+    <span id="bulk-count" class="fw-600" aria-live="polite">0 selected</span>
     <span id="bulk-warnings" class="subtext"></span>
-    <form id="bulk-email-form" hx-post="/api/leads/bulk-email" hx-swap="none">
+    <form id="bulk-email-form" hx-post="/api/leads/bulk-email" hx-target="#bulk-status" hx-swap="innerHTML">
       <input type="hidden" name="lead_ids" id="bulk-lead-ids">
       <input type="hidden" name="attach_report" value="0">
       <button type="submit" class="btn btn-secondary btn-sm">Email</button>
     </form>
-    <form id="bulk-email-report-form" hx-post="/api/leads/bulk-email" hx-swap="none">
+    <form id="bulk-email-report-form" hx-post="/api/leads/bulk-email" hx-target="#bulk-status" hx-swap="innerHTML">
       <input type="hidden" name="lead_ids" id="bulk-report-lead-ids">
       <input type="hidden" name="attach_report" value="1">
-      <button type="submit" class="btn btn-primary btn-sm">Email with Report</button>
+      <button type="submit" class="btn btn-primary btn-sm" title="Attach each lead's audit report (scored leads only)">Email with report</button>
     </form>
-    <form id="bulk-sms-form" hx-post="/api/leads/bulk-sms" hx-swap="none">
+    <form id="bulk-sms-form" hx-post="/api/leads/bulk-sms" hx-target="#bulk-status" hx-swap="innerHTML">
       <input type="hidden" name="lead_ids" id="bulk-sms-lead-ids">
-      <button type="submit" class="btn btn-secondary btn-sm">Direct SMS</button>
+      <button type="submit" class="btn btn-secondary btn-sm">SMS</button>
     </form>
     <form id="bulk-delete-form" hx-post="/api/leads/bulk-delete"
-          hx-target="#bulk-delete-result" hx-swap="innerHTML"
+          hx-target="#bulk-status" hx-swap="innerHTML"
           hx-confirm="Delete 0 selected leads? This cannot be undone.">
       <input type="hidden" name="lead_ids" id="bulk-delete-lead-ids">
       <button type="submit" class="btn btn-danger btn-sm">Delete</button>
     </form>
-    <span id="bulk-delete-result"></span>
   </div>
+  <div id="bulk-status" aria-live="polite"></div>
 </div>
 
 <div id="enrich-progress"></div>
 <div id="batch-progress"></div>
 
-<div class="card" style="padding:0">
+<div class="card card-flush">
+  <div class="lead-table-head" aria-hidden="true">
+    <span></span>
+    <span>Business</span>
+    <span>Email</span>
+    <span>Phone</span>
+    <span>Rating</span>
+    <span>Score</span>
+    <span>Stage</span>
+    <span class="text-right">Actions</span>
+  </div>
   <div id="lead-list">
     {% if leads %}
       {% for lead in leads %}
         {% include "partials/lead_card.html" %}
       {% endfor %}
+    {% elif has_filters %}
+      <div class="empty-state">
+        <h3>No leads match these filters</h3>
+        <p>Try clearing a filter, or run a new search to add more leads.</p>
+        <div class="row row-center">
+          <a href="/leads" class="btn btn-secondary btn-sm">Clear filters</a>
+          <a href="/search" class="btn btn-primary btn-sm">Search for leads <span class="cost">· 1 credit</span></a>
+        </div>
+      </div>
     {% else %}
       {% include "partials/empty_state.html" %}
     {% endif %}
@@ -110,15 +157,11 @@
 </div>
 
 {% if total_pages > 1 %}
-<div style="display:flex;justify-content:center;align-items:center;gap:12px;margin-top:16px">
-  {% if page > 1 %}
-  <a href="javascript:void(0)" onclick="filterLeads('page', '{{ page - 1 }}')" class="btn btn-secondary btn-sm">&larr; Prev</a>
-  {% endif %}
+<nav class="pagination" aria-label="Pagination">
+  <button type="button" class="btn btn-secondary btn-sm" onclick="filterLeads('page', '{{ page - 1 }}')" {% if page <= 1 %}disabled{% endif %}>&larr; Prev</button>
   <span class="subtext">Page {{ page }} of {{ total_pages }}</span>
-  {% if page < total_pages %}
-  <a href="javascript:void(0)" onclick="filterLeads('page', '{{ page + 1 }}')" class="btn btn-secondary btn-sm">Next &rarr;</a>
-  {% endif %}
-</div>
+  <button type="button" class="btn btn-secondary btn-sm" onclick="filterLeads('page', '{{ page + 1 }}')" {% if page >= total_pages %}disabled{% endif %}>Next &rarr;</button>
+</nav>
 {% endif %}
 
 <script>
@@ -134,14 +177,14 @@ function updateBulkBar() {
   var bar = document.getElementById('bulk-bar');
   var count = document.getElementById('bulk-count');
   var warnings = document.getElementById('bulk-warnings');
-  var ids = document.getElementById('bulk-lead-ids');
+  var selectAll = document.getElementById('select-all');
 
   if (checks.length === 0) {
-    bar.style.display = 'none';
-    document.getElementById('select-all').checked = false;
+    bar.hidden = true;
+    if (selectAll) selectAll.checked = false;
     return;
   }
-  bar.style.display = '';
+  bar.hidden = false;
 
   var noEmail = 0, noPhone = 0, noScore = 0;
   var idList = [];
@@ -153,10 +196,9 @@ function updateBulkBar() {
   });
 
   count.textContent = checks.length + ' selected';
-  ids.value = idList.join(',');
-  document.getElementById('bulk-report-lead-ids').value = idList.join(',');
-  document.getElementById('bulk-sms-lead-ids').value = idList.join(',');
-  document.getElementById('bulk-delete-lead-ids').value = idList.join(',');
+  ['bulk-lead-ids', 'bulk-report-lead-ids', 'bulk-sms-lead-ids', 'bulk-delete-lead-ids'].forEach(function(id) {
+    document.getElementById(id).value = idList.join(',');
+  });
   document.getElementById('bulk-delete-form').setAttribute('hx-confirm',
     'Delete ' + idList.length + ' selected lead' + (idList.length === 1 ? '' : 's') + '? This cannot be undone.');
 
@@ -167,13 +209,30 @@ function updateBulkBar() {
   warnings.textContent = parts.length ? '(' + parts.join(', ') + ')' : '';
 
   var all = document.querySelectorAll('.lead-select');
-  document.getElementById('select-all').checked = (checks.length === all.length);
+  if (selectAll) selectAll.checked = (checks.length === all.length);
 }
 
 function toggleSelectAll(checked) {
   document.querySelectorAll('.lead-select').forEach(function(cb) { cb.checked = checked; });
   updateBulkBar();
 }
+
+// "Score all unscored": when the whole filtered set is on this page we know the exact count and cost.
+(function() {
+  var btn = document.getElementById('score-all-btn');
+  if (!btn) return;
+  var onPage = document.querySelectorAll('.lead-select').length;
+  var total = {{ total_leads }};
+  if (onPage === total) {
+    var n = document.querySelectorAll('.lead-select[data-has-score="0"][data-has-website="1"]').length;
+    if (n === 0) {
+      btn.setAttribute('hx-confirm', 'No unscored leads with a website in the current view. Continue anyway?');
+    } else {
+      btn.setAttribute('hx-confirm', 'Score ' + n + ' unscored lead' + (n === 1 ? '' : 's') + ' · ' + n + ' credit' + (n === 1 ? '' : 's') + '. Continue?');
+      btn.title = 'Score ' + n + ' unscored leads · ' + n + ' credits';
+    }
+  }
+})();
 
 document.body.addEventListener('htmx:afterRequest', function(e) {
   if (e.detail.elt && e.detail.elt.id === 'bulk-delete-form' && e.detail.successful) {
@@ -182,23 +241,27 @@ document.body.addEventListener('htmx:afterRequest', function(e) {
       if (card) card.remove();
     });
     var remaining = document.querySelectorAll('.lead-card').length;
-    var countEl = document.querySelector('.section-header .subtext');
+    var countEl = document.getElementById('lead-total');
     if (countEl) countEl.textContent = remaining + ' total';
-    document.getElementById('bulk-bar').style.display = 'none';
-  }
-  if (e.detail.xhr) {
-    var redirect = e.detail.xhr.getResponseHeader('HX-Redirect');
-    if (redirect) window.location.href = redirect;
+    updateBulkBar();
   }
 });
 
 // More-menu toggle
-document.querySelector('.more-menu-toggle').addEventListener('click', function(e) {
-  e.stopPropagation();
-  this.closest('.more-menu').classList.toggle('open');
-});
-document.addEventListener('click', function() {
-  document.querySelectorAll('.more-menu.open').forEach(function(m) { m.classList.remove('open'); });
-});
+(function() {
+  var toggle = document.querySelector('.more-menu-toggle');
+  if (!toggle) return;
+  toggle.addEventListener('click', function(e) {
+    e.stopPropagation();
+    var open = this.closest('.more-menu').classList.toggle('open');
+    this.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  document.addEventListener('click', function() {
+    document.querySelectorAll('.more-menu.open').forEach(function(m) {
+      m.classList.remove('open');
+      var t = m.querySelector('.more-menu-toggle'); if (t) t.setAttribute('aria-expanded', 'false');
+    });
+  });
+})();
 </script>
 {% endblock %}

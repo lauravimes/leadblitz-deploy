@@ -2,9 +2,9 @@
 {% block title %}{{ lead.name }} — LeadBlitz{% endblock %}
 
 {% block content %}
-<a href="/leads" class="subtext" style="text-decoration:none">&larr; Back to leads</a>
+<a href="/leads" class="subtext link-plain">&larr; Back to leads</a>
 
-<div class="detail-header" style="margin-top:16px">
+<div class="detail-header mt-16">
   <div>
     <h1>{{ lead.name }}</h1>
     <div class="detail-meta">
@@ -15,27 +15,39 @@
       {% if lead.rating %}<span>{{ lead.rating }} ★ ({{ lead.review_count }} reviews)</span>{% endif %}
     </div>
   </div>
-  <div style="display:flex;gap:8px;align-items:center">
+  <div class="row" id="score-header">
     {% if lead.score is not none %}
-      <span class="score {{ 'score-high' if lead.score >= 70 else ('score-mid' if lead.score >= 40 else 'score-low') }}">{{ lead.score }}</span>
-    {% else %}
+      <span class="score score-lg {{ 'score-high' if lead.score >= 70 else ('score-mid' if lead.score >= 40 else 'score-low') }}" title="Website score">{{ lead.score }}</span>
       {% if lead.website %}
-      <button class="btn btn-secondary btn-sm"
-              hx-post="/api/score/{{ lead.id }}" hx-target="#score-panel" hx-swap="innerHTML"
-              hx-indicator="#score-indicator">Score</button>
-      <span id="score-indicator" class="htmx-indicator">Analysing...</span>
-      {% else %}
-      <span class="score score-none">—</span>
+      <button class="btn btn-secondary btn-sm" type="button"
+              hx-post="/api/score/{{ lead.id }}" hx-vals='{"force":"1"}'
+              hx-target="#score-panel" hx-swap="innerHTML"
+              hx-confirm="Re-score this website? This costs 1 credit and replaces the current score."
+              hx-indicator="#score-indicator">Re-score <span class="cost">· 1 credit</span></button>
+      <span id="score-indicator" class="htmx-indicator">Analysing…</span>
       {% endif %}
+    {% elif lead.website %}
+      <button class="btn btn-primary btn-sm" type="button"
+              hx-post="/api/score/{{ lead.id }}" hx-target="#score-panel" hx-swap="innerHTML"
+              hx-indicator="#score-indicator">Score website <span class="cost">· 1 credit</span></button>
+      <span id="score-indicator" class="htmx-indicator">Analysing…</span>
+    {% else %}
+      <span class="score score-none" title="No website to score">—</span>
     {% endif %}
   </div>
 </div>
 
+{% if lead.score is none and lead.website %}
+<div class="notice">
+  Scoring analyses the website across 11 dimensions and unlocks the client audit report, the PDF download and a personalised email. <strong>1 credit.</strong>
+</div>
+{% endif %}
+
 <!-- Stage -->
 <div class="card">
-  <div style="display:flex;gap:16px;align-items:center">
-    <span class="label" style="margin-bottom:0">Stage</span>
-    <select style="width:auto;min-width:140px"
+  <div class="row gap-16">
+    <label class="label mb-0" for="lead-stage">Stage</label>
+    <select id="lead-stage" class="select-inline"
             hx-patch="/api/leads/{{ lead.id }}/stage" hx-target="#stage-confirm" hx-swap="innerHTML"
             name="stage">
       <option value="new" {{ 'selected' if lead.stage == 'new' }}>New</option>
@@ -43,53 +55,54 @@
       <option value="qualified" {{ 'selected' if lead.stage == 'qualified' }}>Qualified</option>
       <option value="rejected" {{ 'selected' if lead.stage == 'rejected' }}>Rejected</option>
     </select>
-    <span id="stage-confirm"></span>
+    <span id="stage-confirm" aria-live="polite"></span>
   </div>
 </div>
 
 <!-- Contact details -->
 <div class="card">
   <p class="label">Contact details</p>
-  <form hx-patch="/api/leads/{{ lead.id }}/contact" hx-target="#contact-confirm" hx-swap="innerHTML" style="margin-top:8px">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+  <form hx-patch="/api/leads/{{ lead.id }}/contact" hx-target="#contact-confirm" hx-swap="innerHTML" class="mt-8">
+    <div class="grid-2">
       <div class="form-group">
-        <label>Phone</label>
-        <input type="text" name="phone" value="{{ lead.phone or '' }}" placeholder="No phone number">
+        <label for="lead-phone">Phone</label>
+        <input type="text" id="lead-phone" name="phone" value="{{ lead.phone or '' }}" placeholder="No phone number" autocomplete="off">
       </div>
       <div class="form-group">
-        <label>Email</label>
-        <input type="email" name="email" value="{{ lead.email or '' }}" placeholder="No email address">
+        <label for="lead-email">Email</label>
+        <input type="email" id="lead-email" name="email" value="{{ lead.email or '' }}" placeholder="No email address" autocomplete="off">
       </div>
     </div>
     <button type="submit" class="btn btn-primary btn-sm">Save</button>
-    <span id="contact-confirm" style="margin-left:12px"></span>
+    <span id="contact-confirm" class="ml-12" aria-live="polite"></span>
   </form>
 </div>
 
 <!-- Notes -->
 <div class="card">
-  <p class="label">Notes</p>
-  <textarea name="notes"
+  <label class="label" for="lead-notes">Notes</label>
+  <textarea id="lead-notes" name="notes"
             hx-patch="/api/leads/{{ lead.id }}/notes" hx-trigger="keyup changed delay:500ms"
             hx-target="#notes-confirm" hx-swap="innerHTML"
             placeholder="Add notes about this lead...">{{ lead.notes or '' }}</textarea>
-  <span id="notes-confirm"></span>
+  <span id="notes-confirm" aria-live="polite"></span>
 </div>
 
 <!-- Email enrichment -->
 {% if lead.website and not lead.email %}
 <div class="card">
   <p class="label">Email enrichment</p>
-  <div style="display:flex;gap:8px;align-items:center">
-    <button class="btn btn-secondary btn-sm"
+  <div class="row">
+    <button class="btn btn-secondary btn-sm" type="button"
             hx-post="/api/enrich/website" hx-vals='{"lead_ids":"{{ lead.id }}"}'
-            hx-target="#enrich-results" hx-indicator="#enrich-indicator">Scrape website</button>
-    <button class="btn btn-secondary btn-sm"
+            hx-target="#enrich-results" hx-indicator="#enrich-indicator">Scrape website <span class="cost">· free</span></button>
+    <button class="btn btn-secondary btn-sm" type="button"
             hx-post="/api/enrich/hunter" hx-vals='{"lead_ids":"{{ lead.id }}"}'
-            hx-target="#enrich-results" hx-indicator="#enrich-indicator">Hunter.io lookup</button>
+            hx-confirm="Look this business up on Hunter.io? This costs 2 credits."
+            hx-target="#enrich-results" hx-indicator="#enrich-indicator">Hunter.io lookup <span class="cost">· 2 credits</span></button>
     <span id="enrich-indicator" class="htmx-indicator">Searching...</span>
   </div>
-  <div id="enrich-results" style="margin-top:8px"></div>
+  <div id="enrich-results" class="mt-8"></div>
 </div>
 {% endif %}
 
@@ -102,16 +115,27 @@
 
 <!-- Reports -->
 {% if lead.score is not none %}
-<div class="card">
+<div class="card" id="reports-card">
   <p class="label">Reports</p>
   {% include "partials/report_actions.html" %}
 </div>
 {% endif %}
 
 <!-- Delete -->
-<div style="margin-top:32px;text-align:right">
-  <button class="btn btn-danger btn-sm"
+<div class="mt-32 text-right">
+  <button class="btn btn-danger btn-sm" type="button"
           hx-delete="/api/leads/{{ lead.id }}" hx-confirm="Delete this lead?"
-          hx-target="body" hx-swap="innerHTML">Delete lead</button>
+          hx-swap="none">Delete lead</button>
 </div>
+
+<script>
+// After a (re)score lands in #score-panel the header badge and the Reports card are stale —
+// reload so both reflect the new score. Error partials (200 + .error-msg) are left visible.
+document.body.addEventListener('htmx:afterSwap', function(e) {
+  if (e.detail.target && e.detail.target.id === 'score-panel') {
+    if (e.detail.target.querySelector('.error-msg')) return;
+    if (e.detail.target.querySelector('.score')) location.reload();
+  }
+});
+</script>
 {% endblock %}

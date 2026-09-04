@@ -4,82 +4,95 @@
 {% block content %}
 <h1>Settings</h1>
 
-<div class="tabs" style="margin:24px 0 20px">
-  <button class="tab active" onclick="showTab('profile', this)">Profile</button>
-  <button class="tab" onclick="showTab('api-keys', this)">API and SMS Keys</button>
-  <button class="tab" onclick="showTab('email-provider', this)">Email Provider</button>
+<div class="tabs" role="tablist" aria-label="Settings sections">
+  <button class="tab active" type="button" role="tab" id="tab-btn-profile" aria-selected="true" aria-controls="tab-profile" onclick="showTab('profile', this)">Profile</button>
+  <button class="tab" type="button" role="tab" id="tab-btn-api-keys" aria-selected="false" aria-controls="tab-api-keys" onclick="showTab('api-keys', this)">API and SMS keys</button>
+  <button class="tab" type="button" role="tab" id="tab-btn-email-provider" aria-selected="false" aria-controls="tab-email-provider" onclick="showTab('email-provider', this)">Email provider</button>
 </div>
 
 <!-- Profile Tab -->
-<div id="tab-profile" class="tab-content">
+<div id="tab-profile" class="tab-content" role="tabpanel" aria-labelledby="tab-btn-profile">
   <div class="card">
     <h2>Profile</h2>
-    <form hx-post="/api/settings/profile" hx-target="#profile-status" hx-swap="innerHTML" style="margin-top:16px">
+    <form hx-post="/api/settings/profile" hx-target="#profile-status" hx-swap="innerHTML" class="mt-16">
       <div class="form-group">
-        <label>Full name</label>
-        <input type="text" name="full_name" value="{{ user.full_name }}" required>
+        <label for="profile-full-name">Full name</label>
+        <input type="text" id="profile-full-name" name="full_name" value="{{ user.full_name }}" required autocomplete="name">
       </div>
       <div class="form-group">
-        <label>Email</label>
-        <input type="email" name="email" value="{{ user.email }}" required>
+        <label for="profile-email">Email</label>
+        <input type="email" id="profile-email" name="email" value="{{ user.email }}" required autocomplete="email">
       </div>
       <button type="submit" class="btn btn-primary btn-sm">Save</button>
-      <span id="profile-status" style="margin-left:12px"></span>
+      <span id="profile-status" class="ml-12" aria-live="polite"></span>
     </form>
   </div>
 
   <div class="card">
     <h2>Change password</h2>
-    <form hx-post="/api/settings/password" hx-target="#pw-status" hx-swap="innerHTML" style="margin-top:16px">
+    <form hx-post="/api/settings/password" hx-target="#pw-status" hx-swap="innerHTML" class="mt-16">
       <div class="form-group">
-        <label>Current password</label>
-        <input type="password" name="current_password" required>
+        <label for="pw-current">Current password</label>
+        <input type="password" id="pw-current" name="current_password" required autocomplete="current-password">
       </div>
       <div class="form-group">
-        <label>New password</label>
-        <input type="password" name="new_password" required minlength="8">
+        <label for="pw-new">New password</label>
+        <input type="password" id="pw-new" name="new_password" required minlength="8" autocomplete="new-password">
       </div>
       <button type="submit" class="btn btn-primary btn-sm">Update password</button>
-      <span id="pw-status" style="margin-left:12px"></span>
+      <span id="pw-status" class="ml-12" aria-live="polite"></span>
     </form>
   </div>
 </div>
 
 <!-- API Keys Tab -->
-<div id="tab-api-keys" class="tab-content" style="display:none">
+<div id="tab-api-keys" class="tab-content" role="tabpanel" aria-labelledby="tab-btn-api-keys" hidden>
   <div class="card">
-    <h2>Twilio (SMS)</h2>
-    <form hx-post="/api/settings/api-keys" hx-target="#keys-status" hx-swap="innerHTML" style="margin-top:16px">
-      <div class="form-group">
-        <label>Account SID</label>
-        <input type="text" name="twilio_account_sid" placeholder="ACxxxxxxx">
+    <div class="row row-between">
+      <h2 class="mb-0">Integrations</h2>
+      <span class="subtext">Secrets are encrypted at rest and never shown again.</span>
+    </div>
+    <div id="api-keys-status" class="mt-12" hx-get="/api/settings/api-keys" hx-trigger="load, keysSaved from:body" hx-swap="innerHTML" aria-live="polite">
+      <span class="subtext">Checking saved keys…</span>
+    </div>
+    <hr class="rule">
+    <form hx-post="/api/settings/api-keys" hx-target="#keys-status" hx-swap="innerHTML"
+          hx-on::after-request="if(event.detail.successful){ htmx.trigger(document.body, 'keysSaved'); this.reset(); }">
+      <h3>Twilio (SMS)</h3>
+      <p class="subtext mb-12">Needed to send SMS. Twilio bills you directly for messages; LeadBlitz charges no credits for SMS.</p>
+      <div class="grid-2">
+        <div class="form-group">
+          <label for="twilio-sid">Account SID</label>
+          <input type="text" id="twilio-sid" name="twilio_account_sid" placeholder="ACxxxxxxx" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label for="twilio-token">Auth token</label>
+          <input type="password" id="twilio-token" name="twilio_auth_token" placeholder="Enter to update" autocomplete="off">
+        </div>
       </div>
       <div class="form-group">
-        <label>Auth Token</label>
-        <input type="password" name="twilio_auth_token" placeholder="Enter to update">
+        <label for="twilio-phone">Twilio phone number</label>
+        <input type="tel" id="twilio-phone" name="twilio_phone_number" placeholder="+441234567890" autocomplete="off">
       </div>
+      <hr class="rule">
+      <h3>Hunter.io (email enrichment)</h3>
+      <p class="subtext mb-12">Optional. Hunter lookups cost 2 credits each on top of your Hunter plan.</p>
       <div class="form-group">
-        <label>Phone Number</label>
-        <input type="text" name="twilio_phone_number" placeholder="+1234567890">
+        <label for="hunter-key">API key</label>
+        <input type="password" id="hunter-key" name="hunter_api_key" placeholder="Enter to update" autocomplete="off">
       </div>
-      <hr style="margin:16px 0;border:none;border-top:1px solid var(--border)">
-      <h2>Hunter.io (Email Enrichment)</h2>
-      <div class="form-group" style="margin-top:16px">
-        <label>API Key</label>
-        <input type="password" name="hunter_api_key" placeholder="Enter to update">
-      </div>
-      <button type="submit" class="btn btn-primary btn-sm">Save API Keys</button>
-      <span id="keys-status" style="margin-left:12px"></span>
+      <button type="submit" class="btn btn-primary btn-sm">Save API keys</button>
+      <span id="keys-status" class="ml-12" aria-live="polite"></span>
     </form>
   </div>
 </div>
 
 <!-- Email Provider Tab -->
-<div id="tab-email-provider" class="tab-content" style="display:none">
+<div id="tab-email-provider" class="tab-content" role="tabpanel" aria-labelledby="tab-btn-email-provider" hidden>
   {% if email_settings and email_settings.provider != 'none' %}
-  <div class="card" style="margin-bottom:16px">
+  <div class="card">
     <h2>Current provider</h2>
-    <div style="margin-top:8px;font-size:.93rem">
+    <div class="mt-8">
       {% if email_settings.provider == 'smtp' %}
         <strong>SMTP</strong> — {{ email_settings.smtp_host }}:{{ email_settings.smtp_port }} (from: {{ email_settings.smtp_from_email }})
       {% elif email_settings.provider == 'sendgrid' %}
@@ -93,143 +106,134 @@
       {% endif %}
     </div>
   </div>
+  {% else %}
+  <div class="notice">No email provider connected yet. Connect one below before sending outreach — sending is free, we never charge credits for it.</div>
   {% endif %}
 
   <div class="card">
     <h2>Connect Gmail</h2>
-    <p class="subtext" style="margin-bottom:16px">Send emails from your Gmail account. Uses an app password — your credentials are encrypted and never shared.</p>
+    <p class="subtext mb-16">Send emails from your Gmail account. Uses an app password — your credentials are encrypted and never shared.</p>
 
-    <div style="background:#f8f9fa;border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:16px;font-size:.87rem;line-height:1.6">
+    <div class="setup-steps">
       <strong>Setup (one time, takes 2 minutes):</strong>
-      <ol style="margin:8px 0 0;padding-left:20px">
-        <li>Go to <a href="https://myaccount.google.com/apppasswords" target="_blank" style="color:var(--accent)">myaccount.google.com/apppasswords</a></li>
+      <ol>
+        <li>Go to <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">myaccount.google.com/apppasswords</a></li>
         <li>You may need to enable 2-step verification first</li>
         <li>Create a new app password (name it "LeadBlitz" or anything)</li>
         <li>Copy the 16-character password and paste it below</li>
       </ol>
     </div>
 
-    <form hx-post="/api/settings/email/smtp" hx-target="#email-status" hx-swap="innerHTML" style="margin-top:12px">
+    <form hx-post="/api/settings/email/smtp" hx-target="#email-status" hx-swap="innerHTML" class="mt-12" data-mirror-username>
       <input type="hidden" name="smtp_host" value="smtp.gmail.com">
       <input type="hidden" name="smtp_port" value="587">
       <div class="form-group">
-        <label>Gmail address</label>
-        <input type="email" name="smtp_from_email" placeholder="you@gmail.com">
+        <label for="gmail-address">Gmail address</label>
+        <input type="email" id="gmail-address" name="smtp_from_email" placeholder="you@gmail.com" autocomplete="email">
       </div>
       <div class="form-group">
-        <label>App password</label>
-        <input type="password" name="smtp_password" placeholder="xxxx xxxx xxxx xxxx">
+        <label for="gmail-app-password">App password</label>
+        <input type="password" id="gmail-app-password" name="smtp_password" placeholder="xxxx xxxx xxxx xxxx" autocomplete="off">
       </div>
-      <input type="hidden" name="smtp_username" id="gmail-username">
+      <input type="hidden" name="smtp_username">
       <button type="submit" class="btn btn-primary btn-sm">Connect Gmail</button>
     </form>
-    <script>
-    (function(){
-      var form = document.querySelector('[hx-post="/api/settings/email/smtp"]');
-      if (form) {
-        form.addEventListener('htmx:configRequest', function() {
-          var email = form.querySelector('[name="smtp_from_email"]').value;
-          form.querySelector('[name="smtp_username"]').value = email;
-        });
-      }
-    })();
-    </script>
   </div>
 
   <div class="card">
     <h2>Other providers</h2>
-    <p class="subtext" style="margin-bottom:16px">Use Outlook, custom SMTP, or SendGrid instead.</p>
+    <p class="subtext">Use Outlook, custom SMTP, or SendGrid instead.</p>
 
-    <details>
-      <summary style="cursor:pointer;font-weight:500;font-size:.93rem">Outlook</summary>
-      <div style="margin-top:12px">
-        <form hx-post="/api/settings/email/smtp" hx-target="#email-status" hx-swap="innerHTML">
-          <input type="hidden" name="smtp_host" value="smtp-mail.outlook.com">
-          <input type="hidden" name="smtp_port" value="587">
-          <div class="form-group">
-            <label>Outlook email</label>
-            <input type="email" name="smtp_from_email" placeholder="you@outlook.com">
-          </div>
-          <div class="form-group">
-            <label>Password or app password</label>
-            <input type="password" name="smtp_password">
-          </div>
-          <input type="hidden" name="smtp_username" class="outlook-username">
-          <button type="submit" class="btn btn-primary btn-sm">Connect Outlook</button>
-        </form>
-        <script>
-        (function(){
-          var forms = document.querySelectorAll('[value="smtp-mail.outlook.com"]');
-          forms.forEach(function(hidden) {
-            var form = hidden.closest('form');
-            form.addEventListener('htmx:configRequest', function() {
-              var email = form.querySelector('[name="smtp_from_email"]').value;
-              form.querySelector('[name="smtp_username"]').value = email;
-            });
-          });
-        })();
-        </script>
-      </div>
+    <details class="provider">
+      <summary>Outlook</summary>
+      <form hx-post="/api/settings/email/smtp" hx-target="#email-status" hx-swap="innerHTML" data-mirror-username>
+        <input type="hidden" name="smtp_host" value="smtp-mail.outlook.com">
+        <input type="hidden" name="smtp_port" value="587">
+        <div class="form-group">
+          <label for="outlook-address">Outlook email</label>
+          <input type="email" id="outlook-address" name="smtp_from_email" placeholder="you@outlook.com" autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label for="outlook-password">Password or app password</label>
+          <input type="password" id="outlook-password" name="smtp_password" autocomplete="off">
+        </div>
+        <input type="hidden" name="smtp_username">
+        <button type="submit" class="btn btn-primary btn-sm">Connect Outlook</button>
+      </form>
     </details>
 
-    <details style="margin-top:12px">
-      <summary style="cursor:pointer;font-weight:500;font-size:.93rem">Custom SMTP</summary>
-      <form hx-post="/api/settings/email/smtp" hx-target="#email-status" hx-swap="innerHTML" style="margin-top:12px">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <details class="provider">
+      <summary>Custom SMTP</summary>
+      <form hx-post="/api/settings/email/smtp" hx-target="#email-status" hx-swap="innerHTML">
+        <div class="grid-2">
           <div class="form-group">
-            <label>SMTP Host</label>
-            <input type="text" name="smtp_host" placeholder="smtp.example.com">
+            <label for="smtp-host">SMTP host</label>
+            <input type="text" id="smtp-host" name="smtp_host" placeholder="smtp.example.com" autocomplete="off">
           </div>
           <div class="form-group">
-            <label>Port</label>
-            <input type="number" name="smtp_port" value="587">
+            <label for="smtp-port">Port</label>
+            <input type="number" id="smtp-port" name="smtp_port" value="587" min="1" max="65535">
           </div>
         </div>
         <div class="form-group">
-          <label>Username</label>
-          <input type="text" name="smtp_username">
+          <label for="smtp-username">Username</label>
+          <input type="text" id="smtp-username" name="smtp_username" autocomplete="username">
         </div>
         <div class="form-group">
-          <label>Password</label>
-          <input type="password" name="smtp_password">
+          <label for="smtp-password">Password</label>
+          <input type="password" id="smtp-password" name="smtp_password" autocomplete="off">
         </div>
         <div class="form-group">
-          <label>From Email</label>
-          <input type="email" name="smtp_from_email">
+          <label for="smtp-from">From email</label>
+          <input type="email" id="smtp-from" name="smtp_from_email" autocomplete="email">
         </div>
         <button type="submit" class="btn btn-primary btn-sm">Save SMTP</button>
       </form>
     </details>
 
-    <details style="margin-top:12px">
-      <summary style="cursor:pointer;font-weight:500;font-size:.93rem">SendGrid</summary>
-      <form hx-post="/api/settings/email/sendgrid" hx-target="#email-status" hx-swap="innerHTML" style="margin-top:12px">
+    <details class="provider">
+      <summary>SendGrid</summary>
+      <form hx-post="/api/settings/email/sendgrid" hx-target="#email-status" hx-swap="innerHTML">
         <div class="form-group">
-          <label>SendGrid API Key</label>
-          <input type="password" name="sendgrid_api_key">
+          <label for="sendgrid-key">SendGrid API key</label>
+          <input type="password" id="sendgrid-key" name="sendgrid_api_key" autocomplete="off">
         </div>
         <div class="form-group">
-          <label>From Email</label>
-          <input type="email" name="sendgrid_from_email">
+          <label for="sendgrid-from">From email</label>
+          <input type="email" id="sendgrid-from" name="sendgrid_from_email" autocomplete="email">
         </div>
         <button type="submit" class="btn btn-primary btn-sm">Save SendGrid</button>
       </form>
     </details>
   </div>
 
-  <div style="margin-top:20px;display:flex;gap:12px;align-items:center">
-    <button class="btn btn-secondary btn-sm" hx-post="/api/settings/email/test" hx-target="#email-status" hx-swap="innerHTML">Send test email</button>
-    <button class="btn btn-danger btn-sm" hx-delete="/api/settings/email/disconnect" hx-target="#email-status" hx-swap="innerHTML">Disconnect</button>
-    <span id="email-status"></span>
+  <div class="row gap-12 mt-16">
+    <button class="btn btn-secondary btn-sm" type="button" hx-post="/api/settings/email/test" hx-target="#email-status" hx-swap="innerHTML">Send test email</button>
+    <button class="btn btn-danger btn-sm" type="button" hx-delete="/api/settings/email/disconnect" hx-confirm="Disconnect your email provider?" hx-target="#email-status" hx-swap="innerHTML">Disconnect</button>
+    <span id="email-status" aria-live="polite"></span>
   </div>
 </div>
 
 <script>
 function showTab(name, btn) {
-  document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
-  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
-  document.getElementById('tab-' + name).style.display = 'block';
+  document.querySelectorAll('.tab-content').forEach(function(el) { el.hidden = true; });
+  document.querySelectorAll('.tab').forEach(function(el) { el.classList.remove('active'); el.setAttribute('aria-selected', 'false'); });
+  document.getElementById('tab-' + name).hidden = false;
   btn.classList.add('active');
+  btn.setAttribute('aria-selected', 'true');
+  if (history.replaceState) history.replaceState(null, '', '#' + name);
 }
+// Deep-link: /settings#api-keys
+(function() {
+  var name = (location.hash || '').replace('#', '');
+  var btn = name && document.getElementById('tab-btn-' + name);
+  if (btn) showTab(name, btn);
+})();
+// Gmail / Outlook forms: the SMTP username is the address itself
+document.querySelectorAll('form[data-mirror-username]').forEach(function(form) {
+  form.addEventListener('htmx:configRequest', function() {
+    form.querySelector('[name="smtp_username"]').value = form.querySelector('[name="smtp_from_email"]').value;
+  });
+});
 </script>
 {% endblock %}

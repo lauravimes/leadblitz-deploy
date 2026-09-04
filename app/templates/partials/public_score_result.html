@@ -7,17 +7,17 @@
 {% set has_errors = result.get('has_errors', False) %}
 
 <!-- Score header -->
-<div class="card" style="text-align:center;margin-top:32px;padding:32px 24px">
+<div class="card text-center mt-32 score-hero">
   <p class="label">Website score</p>
-  <div style="margin:12px 0 8px">
-    <span class="score {{ 'score-high' if score >= 70 else ('score-mid' if score >= 40 else 'score-low') }}" style="font-size:2.4rem;padding:8px 20px">
+  <div class="mt-12 mb-8">
+    <span class="score score-xl {{ 'score-high' if score >= 70 else ('score-mid' if score >= 40 else 'score-low') }}">
       {{ score }} / 100
     </span>
   </div>
-  <p class="subtext" style="margin-top:8px">{{ url }}</p>
+  <p class="subtext mt-8">{{ url }}</p>
 
   {% if has_errors %}
-  <p style="color:var(--amber);font-size:.87rem;margin-top:12px">
+  <p class="subtext text-amber mt-12">
     {% if result.get('bot_blocked') %}
     This site blocked our scanner. The score may not reflect actual quality.
     {% else %}
@@ -31,16 +31,16 @@
 
 <!-- Score breakdown -->
 <div class="card">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-    <h2>Score breakdown</h2>
-    <div style="display:flex;gap:16px">
+  <div class="row row-between mb-16">
+    <h2 class="mb-0">Score breakdown</h2>
+    <div class="row gap-16">
       <div>
         <p class="label">Technical</p>
-        <span style="font-family:var(--mono);font-size:1.1rem;font-weight:600">{{ result.get('heuristic_score', 0) }}/50</span>
+        <span class="score-part">{{ result.get('heuristic_score', 0) }}/50</span>
       </div>
       <div>
         <p class="label">AI review</p>
-        <span style="font-family:var(--mono);font-size:1.1rem;font-weight:600">{{ result.get('ai_score', 0) }}/50</span>
+        <span class="score-part">{{ result.get('ai_score', 0) }}/50</span>
       </div>
     </div>
   </div>
@@ -58,7 +58,7 @@
   {% endif %}
 
   {% if ai %}
-  <p class="label" style="margin-top:20px">AI review</p>
+  <p class="label mt-24">AI review</p>
   <div class="breakdown-grid">
     <div class="breakdown-item"><span class="breakdown-label">Brand</span><span class="breakdown-score">{{ ai.get('brand', 0) }}/12</span></div>
     <div class="breakdown-item"><span class="breakdown-label">Visual</span><span class="breakdown-score">{{ ai.get('visual', 0) }}/10</span></div>
@@ -73,7 +73,7 @@
 <div hx-get="/api/pagespeed?url={{ url | urlencode }}"
      hx-trigger="load"
      hx-swap="outerHTML">
-  <div class="card report-section" style="text-align:center">
+  <div class="card report-section text-center">
     <span class="subtext">Loading mobile speed score...</span>
   </div>
 </div>
@@ -84,7 +84,7 @@
   <h3>Analysis</h3>
 
   {% if report.get('strengths') %}
-  <p class="label" style="margin-top:12px">Strengths</p>
+  <p class="label mt-12">Strengths</p>
   <ul class="report-list">
     {% for item in report.get('strengths', [])[:3] %}
     <li>{{ item }}</li>
@@ -93,7 +93,7 @@
   {% endif %}
 
   {% if report.get('weaknesses') %}
-  <p class="label" style="margin-top:12px">Weaknesses</p>
+  <p class="label mt-12">Weaknesses</p>
   <ul class="report-list">
     {% for item in report.get('weaknesses', [])[:3] %}
     <li>{{ item }}</li>
@@ -104,8 +104,8 @@
   {% set total_findings = (report.get('strengths', [])|length) + (report.get('weaknesses', [])|length) + (report.get('sales_opportunities', [])|length) %}
   {% set shown = [report.get('strengths', [])[:3]|length, report.get('weaknesses', [])[:3]|length]|sum %}
   {% if total_findings > shown %}
-  <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);text-align:center">
-    <p style="font-size:.87rem;color:var(--muted);margin-bottom:12px">
+  <div class="teaser-more text-center">
+    <p class="subtext mb-12">
       + {{ total_findings - shown }} more findings, sales opportunities, and a branded PDF report
     </p>
     <a href="/register" class="btn btn-primary">Sign up free for the full report</a>
@@ -119,13 +119,13 @@
 {% set health = classify_tech_health(tech) if classify_tech_health else {} %}
 <div class="card report-section">
   <h3>Technology detected</h3>
-  <div style="margin-top:10px">
+  <div class="mt-8">
     {% set cms = tech.get('cms', {}) %}
     {% if cms.get('name') and cms.get('name') != 'Custom/Unknown' %}
-    <p style="font-size:.9rem;margin-bottom:8px"><strong>CMS:</strong> {{ cms.get('name') }}{% if tech.get('cms_version') %} {{ tech.get('cms_version') }}{% endif %}</p>
+    <p class="report-text mb-8"><strong>CMS:</strong> {{ cms.get('name') }}{% if tech.get('cms_version') %} {{ tech.get('cms_version') }}{% endif %}</p>
     {% endif %}
 
-    <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px">
+    <div class="row gap-4 mt-8">
       {% for item in health.get('green', []) %}
       <span class="tech-signal tech-green">{{ item.label }}</span>
       {% endfor %}
@@ -143,13 +143,13 @@
 {% endif %}
 
 <!-- CTA card -->
-<div class="card" style="text-align:center;background:#f8f9fa;border-color:var(--text);margin-top:24px">
-  <h3 style="margin-bottom:4px">Want to use this to win clients?</h3>
-  <p class="subtext" style="margin-bottom:16px">Generate branded PDF audit reports, find leads by location, and send personalised outreach — all from one dashboard.</p>
+<div class="card text-center cta-card mt-24">
+  <h3 class="mb-8">Want to use this to win clients?</h3>
+  <p class="subtext mb-16">Generate branded PDF audit reports, find leads by location, and send personalised outreach — all from one dashboard.</p>
   <a href="/register" class="btn btn-primary">Start free — 200 credits, no card required</a>
 </div>
 
 <!-- Score another -->
-<div style="text-align:center;margin-top:20px">
-  <a href="/score" style="font-size:.87rem;color:var(--muted);text-decoration:underline">Score another website</a>
+<div class="text-center mt-24">
+  <a href="/score" class="subtext">Score another website</a>
 </div>

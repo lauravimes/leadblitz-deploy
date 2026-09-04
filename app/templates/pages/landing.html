@@ -10,29 +10,7 @@
   <link rel="stylesheet" href="/static/landing.css">
 </head>
 <body>
-
-  <!-- Nav -->
-  <nav class="landing-nav">
-    <div class="landing-container">
-      <a href="/" class="logo">LeadBlitz</a>
-      <button class="landing-hamburger" aria-label="Menu">
-        <span></span><span></span><span></span>
-      </button>
-      <div class="landing-nav-links" id="landing-menu">
-        <a href="#features">Features</a>
-        <a href="#pricing">Pricing</a>
-        <a href="#faq">FAQ</a>
-        <a href="/blog">Blog</a>
-        <a href="/score">Free Score</a>
-        {% if user %}
-        <a href="/dashboard" class="btn btn-primary btn-sm">Dashboard</a>
-        {% else %}
-        <a href="/login">Login</a>
-        <a href="/register" class="btn btn-primary btn-sm">Start free</a>
-        {% endif %}
-      </div>
-    </div>
-  </nav>
+  {% include "partials/public_nav.html" %}
 
   <!-- Hero -->
   <section class="hero">
@@ -48,7 +26,7 @@
       <div class="hero-trust">
         <span>200 free credits</span>
         <span>No credit card required</span>
-        <span>Cancel anytime</span>
+        <span>No subscription</span>
       </div>
 
       <!-- Audit mockup -->
@@ -85,7 +63,7 @@
         <div class="step-card">
           <span class="step-num">2</span>
           <h3>Score</h3>
-          <p>Our AI analyses each website across 12+ dimensions and delivers a detailed score in seconds.</p>
+          <p>Our AI analyses each website across 11 dimensions — from mobile and SSL to brand, trust and conversion — and delivers a detailed score in seconds.</p>
         </div>
         <div class="step-card">
           <span class="step-num">3</span>
@@ -95,7 +73,7 @@
         <div class="step-card">
           <span class="step-num">4</span>
           <h3>Convert</h3>
-          <p>Send AI-personalised outreach via email or SMS and manage deals through your CRM pipeline.</p>
+          <p>Send AI-personalised outreach via email or SMS, then track every conversation with pipeline stages and notes.</p>
         </div>
       </div>
     </div>
@@ -127,7 +105,7 @@
             <li>AI lead scoring</li>
             <li>Email outreach</li>
             <li>SMS campaigns</li>
-            <li>CRM pipeline</li>
+            <li>Pipeline stages &amp; notes</li>
           </ul>
           <a href="/register" class="btn btn-secondary btn-block">Get started</a>
         </div>
@@ -191,10 +169,10 @@
 
   <!-- Final CTA -->
   <section class="section section-alt cta-section">
-    <div class="landing-container" style="text-align:center">
+    <div class="landing-container text-center">
       <h2 class="section-title">Ready to grow your agency?</h2>
       <p class="section-sub">Start finding high-quality leads today. No credit card required.</p>
-      <a href="/register" class="btn btn-primary" style="margin-top:16px">Start your free trial</a>
+      <a href="/register" class="btn btn-primary mt-16">Start your free trial</a>
     </div>
   </section>
 
@@ -222,25 +200,11 @@
 
   <script>
   (function(){
-    /* Mobile hamburger */
-    var btn = document.querySelector('.landing-hamburger');
-    var menu = document.getElementById('landing-menu');
-    if(btn && menu){
-      btn.addEventListener('click', function(){
-        btn.classList.toggle('open');
-        menu.classList.toggle('open');
-      });
-    }
-    /* Smooth scroll for anchor links & close mobile menu */
+    /* Smooth scroll for same-page anchor links (nav links are /#id and handled by the shared nav) */
     document.querySelectorAll('a[href^="#"]').forEach(function(a){
       a.addEventListener('click', function(e){
         var target = document.querySelector(a.getAttribute('href'));
-        if(target){
-          e.preventDefault();
-          target.scrollIntoView({behavior:'smooth'});
-          if(menu) menu.classList.remove('open');
-          if(btn) btn.classList.remove('open');
-        }
+        if(target){ e.preventDefault(); target.scrollIntoView({behavior:'smooth'}); }
       });
     });
   })();

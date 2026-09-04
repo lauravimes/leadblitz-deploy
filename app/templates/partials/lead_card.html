@@ -1,37 +1,60 @@
+{# Lead row. Contract: root keeps id="lead-{id}" + class "lead-card" (server OOB-swaps it);
+   Score button keeps class "score-btn"; checkbox name="lead_ids" #}
 <div class="lead-card" id="lead-{{ lead.id }}">
-  <input type="checkbox" class="lead-select" value="{{ lead.id }}"
+  <input type="checkbox" class="lead-select" name="lead_ids" value="{{ lead.id }}"
+         aria-label="Select {{ lead.name }}"
          data-has-email="{{ '1' if lead.email else '0' }}"
          data-has-phone="{{ '1' if lead.phone else '0' }}"
          data-has-score="{{ '1' if lead.score is not none else '0' }}"
-         onchange="updateBulkBar()">
-  <div class="lead-info">
+         data-has-website="{{ '1' if lead.website else '0' }}"
+         onchange="if (typeof updateBulkBar === 'function') updateBulkBar()">
+  <div class="lead-main">
     <div class="lead-name"><a href="/leads/{{ lead.id }}">{{ lead.name }}</a></div>
-    <div class="lead-meta">
-      {% if lead.address %}<span>{{ lead.address | truncate(50) }}</span>{% endif %}
-      {% if lead.phone %}<span>{{ lead.phone }}</span>{% endif %}
-      {% if lead.email %}<span>{{ lead.email }}</span>{% endif %}
-      {% if lead.rating %}<span>{{ lead.rating }} ★</span>{% endif %}
+    {% if lead.address %}<div class="lead-address" title="{{ lead.address }}">{{ lead.address }}</div>{% endif %}
+  </div>
+  <div class="lead-cell lead-cell-email" title="{{ lead.email or '' }}">{% if lead.email %}<a href="mailto:{{ lead.email }}">{{ lead.email }}</a>{% else %}<span class="empty-dash" aria-label="No email">—</span>{% endif %}</div>
+  <div class="lead-cell lead-cell-phone">{% if lead.phone %}<a href="tel:{{ lead.phone }}">{{ lead.phone }}</a>{% else %}<span class="empty-dash" aria-label="No phone">—</span>{% endif %}</div>
+  <div class="lead-cell lead-cell-rating">{% if lead.rating %}<span title="{{ lead.review_count or 0 }} reviews">{{ lead.rating }} ★</span>{% else %}<span class="empty-dash" aria-label="No rating">—</span>{% endif %}</div>
+  <div class="lead-cell lead-cell-score">
+    {% if lead.score is not none %}
+      <span class="score {{ 'score-high' if lead.score >= 70 else ('score-mid' if lead.score >= 40 else 'score-low') }}" title="Website score">{{ lead.score }}</span>
+    {% else %}
+      <span class="score score-none" title="Not scored yet">—</span>
+    {% endif %}
+  </div>
+  <div class="lead-cell lead-cell-stage">
+    <div class="lead-tags">
+      <span class="stage stage-{{ lead.stage }}">{{ lead.stage }}</span>
+      {% if lead.last_emailed_at %}
+        <span class="emailed-badge">Emailed{% if lead.emails_sent_count > 1 %} ×{{ lead.emails_sent_count }}{% endif %}</span>
+      {% endif %}
+      {% if lead.last_sms_at %}
+        <span class="smsed-badge">SMS'd{% if lead.sms_sent_count > 1 %} ×{{ lead.sms_sent_count }}{% endif %}</span>
+      {% endif %}
     </div>
   </div>
   <div class="lead-actions">
-    <span class="stage stage-{{ lead.stage }}">{{ lead.stage }}</span>
-    {% if lead.last_emailed_at %}
-      <span class="emailed-badge">Emailed{% if lead.emails_sent_count > 1 %} ×{{ lead.emails_sent_count }}{% endif %}</span>
-    {% endif %}
-    {% if lead.last_sms_at %}
-      <span class="smsed-badge">SMS'd{% if lead.sms_sent_count > 1 %} ×{{ lead.sms_sent_count }}{% endif %}</span>
-    {% endif %}
     {% if lead.score is not none %}
-      <span class="score {{ 'score-high' if lead.score >= 70 else ('score-mid' if lead.score >= 40 else 'score-low') }}">{{ lead.score }}</span>
+      <a href="/leads/{{ lead.id }}" class="btn btn-secondary btn-sm">Report</a>
+      {% if lead.website %}
+      <button class="btn btn-secondary btn-sm score-btn" type="button"
+              hx-post="/api/score/{{ lead.id }}"
+              hx-vals='{"force":"1"}'
+              hx-confirm="Re-score {{ lead.name }}? This costs 1 credit."
+              hx-target="#lead-{{ lead.id }}"
+              hx-swap="outerHTML"
+              title="Re-score · 1 credit">Re-score <span class="cost">· 1 cr</span></button>
+      {% endif %}
     {% elif lead.website %}
-      <button class="btn btn-secondary btn-sm"
+      <button class="btn btn-primary btn-sm score-btn" type="button"
               hx-post="/api/score/{{ lead.id }}"
               hx-target="#lead-{{ lead.id }}"
               hx-swap="outerHTML"
-              hx-indicator="#ind-{{ lead.id }}">Score</button>
-      <span id="ind-{{ lead.id }}" class="htmx-indicator">Analysing...</span>
+              hx-indicator="#ind-{{ lead.id }}"
+              title="Score this website · 1 credit">Score <span class="cost">· 1 cr</span></button>
+      <span id="ind-{{ lead.id }}" class="htmx-indicator">Analysing…</span>
     {% else %}
-      <span class="score score-none">—</span>
+      <span class="subtext" title="This lead has no website to score">No website</span>
     {% endif %}
   </div>
 </div>

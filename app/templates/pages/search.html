@@ -1,38 +1,53 @@
 {% extends "base.html" %}
 {% block title %}Search — LeadBlitz{% endblock %}
+{% block container_class %}container container-wide{% endblock %}
 
 {% block content %}
 <h1>Find leads</h1>
-<p class="subtext" style="margin-bottom:24px">Search for businesses by type and location</p>
+<p class="subtext mb-16">Search for local businesses by type and location. <strong>1 credit per search</strong> (up to 20 leads); we also scrape each website for an email address at no charge.</p>
 
 <div class="card">
   <form class="search-form" hx-post="/api/search" hx-target="#results" hx-swap="innerHTML" hx-indicator="#search-indicator">
-    <div class="form-group" style="margin-bottom:0">
+    <div class="form-group mb-0">
       <label for="business_type">Business type</label>
       <input type="text" id="business_type" name="business_type" placeholder="plumber, dentist, restaurant..." required>
     </div>
-    <div class="form-group" style="margin-bottom:0">
+    <div class="form-group mb-0">
       <label for="location">Location</label>
       <input type="text" id="location" name="location" placeholder="Manchester, London..." required>
     </div>
-    <button type="submit" class="btn btn-primary">Search</button>
+    <button type="submit" class="btn btn-primary" title="Search · 1 credit">Search <span class="cost">· 1 credit</span></button>
   </form>
-  <span id="search-indicator" class="htmx-indicator" style="margin-top:10px">Searching...</span>
+  <span id="search-indicator" class="htmx-indicator mt-8">Searching Google Places…</span>
 </div>
 
 {% if campaigns %}
-<div style="margin-top:32px">
-  <p class="label">Recent searches</p>
+<div class="mt-24" id="recent-searches">
+  <p class="label">Recent searches <span class="cost">· re-running costs 1 credit</span></p>
   {% for c in campaigns %}
-  <div class="card card-compact" style="cursor:pointer"
-       hx-post="/api/search" hx-target="#results" hx-swap="innerHTML"
-       hx-vals='{"business_type":"{{ c.business_type }}","location":"{{ c.location }}","campaign_id":"{{ c.id }}"}'>
-    <span style="font-weight:500">{{ c.business_type }}</span>
-    <span class="subtext"> in {{ c.location }}</span>
+  <div class="card card-compact recent-search row row-between" role="button" tabindex="0"
+       hx-post="/api/search" hx-target="#results" hx-swap="innerHTML" hx-indicator="#search-indicator"
+       hx-trigger="click, keyup[key=='Enter']"
+       hx-vals='{{ {"business_type": c.business_type, "location": c.location, "campaign_id": c.id} | tojson }}'>
+    <span><span class="fw-600">{{ c.business_type }}</span> <span class="subtext">in {{ c.location }}</span></span>
+    <a href="/leads?campaign_id={{ c.id }}" class="subtext link-plain" onclick="event.stopPropagation()">View leads &rarr;</a>
   </div>
   {% endfor %}
 </div>
 {% endif %}
 
-<div id="results" style="margin-top:24px"></div>
+<div id="results" class="mt-24"></div>
+<p id="results-hint" class="notice mt-12" hidden>
+  <strong>Next step:</strong> score a lead (1 credit) to unlock its audit report and a personalised email. Tick several and use the bulk bar on the <a href="/leads">Leads</a> page to work through them.
+</p>
+
+<script>
+document.body.addEventListener('htmx:afterSwap', function(e) {
+  if (!e.detail.target || e.detail.target.id !== 'results') return;
+  var hint = document.getElementById('results-hint');
+  if (hint) hint.hidden = !e.detail.target.querySelector('.lead-card');
+  var recent = document.getElementById('recent-searches');
+  if (recent && e.detail.target.querySelector('.lead-card')) recent.hidden = true;
+});
+</script>
 {% endblock %}

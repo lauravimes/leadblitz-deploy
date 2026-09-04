@@ -12,11 +12,6 @@ html{scroll-behavior:smooth;scroll-padding-top:60px}
 .landing-nav-links{display:flex;gap:24px;align-items:center}
 .landing-nav-links a{color:var(--muted);text-decoration:none;font-size:.87rem;letter-spacing:.01em}
 .landing-nav-links a:hover{color:var(--text)}
-.landing-hamburger{display:none;background:none;border:none;cursor:pointer;padding:4px;flex-direction:column;gap:5px}
-.landing-hamburger span{display:block;width:22px;height:2px;background:var(--text);border-radius:1px;transition:transform .2s,opacity .2s}
-.landing-hamburger.open span:nth-child(1){transform:translateY(7px) rotate(45deg)}
-.landing-hamburger.open span:nth-child(2){opacity:0}
-.landing-hamburger.open span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
 
 /* Hero */
 .hero{padding:80px 0 40px;text-align:center}
@@ -135,7 +130,6 @@ html{scroll-behavior:smooth;scroll-padding-top:60px}
 
 /* Responsive */
 @media(max-width:600px){
-  .landing-hamburger{display:flex}
   .landing-nav .landing-container{position:relative}
   .landing-nav-links{
     display:none;flex-direction:column;gap:0;

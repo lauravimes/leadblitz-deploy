@@ -315,9 +315,11 @@ def sms_page(
 
 
 @router.get("/credits")
-def credits_page(request: Request, db: Session = Depends(get_db)):
+def credits_page(request: Request, trial: str = None, db: Session = Depends(get_db)):
     from app.models import UserCredits
-    from app.services.stripe_client import CREDIT_PACKAGES, CREDIT_COSTS
+    from app.services.stripe_client import CREDIT_PACKAGES
+    from app.services.credits import CREDIT_COSTS, CREDIT_COST_LABELS
+    from app.routers.credits import package_sold_out
     from app.config import get_settings
     user = get_current_user(request, db)
     settings = get_settings()
@@ -327,6 +329,7 @@ def credits_page(request: Request, db: Session = Depends(get_db)):
         db.add(credits)
         db.commit()
         db.refresh(credits)
+    sold_out = {pid for pid in CREDIT_PACKAGES if package_sold_out(db, pid)}
     return _tpl(request).TemplateResponse(
         "pages/credits.html",
         {
@@ -335,59 +338,49 @@ def credits_page(request: Request, db: Session = Depends(get_db)):
             "active_page": "credits",
             "credits": credits,
             "packages": CREDIT_PACKAGES,
+            "sold_out": sold_out,
             "costs": CREDIT_COSTS,
+            "cost_labels": CREDIT_COST_LABELS,
             "stripe_pk": settings.stripe_publishable_key,
+            "trial_withheld": trial == "withheld",
         },
     )
 
 
 @router.get("/credits/success")
 def payment_success_page(request: Request, session_id: str = "", db: Session = Depends(get_db)):
+    import logging
+    from app.services.stripe_client import retrieve_checkout_session
+    from app.routers.credits import grant_from_checkout_session
+
     user = get_current_user(request, db)
     credits_added = 0
+    already_credited = False
 
     if session_id:
-        import stripe
-        from app.config import get_settings
-        from app.services.credits import credit_manager
-        from app.models import Payment
-
-        settings = get_settings()
-        stripe.api_key = settings.stripe_secret_key
-
         try:
-            session = stripe.checkout.Session.retrieve(session_id)
-            if session.payment_status == "paid":
-                metadata = session.get("metadata", {})
-                uid = int(metadata.get("user_id", 0))
-                credits_amount = int(metadata.get("credits", 0))
-                plan_name = metadata.get("plan_name", "")
-                amount_cents = int(metadata.get("amount_cents", 0))
-
-                if uid == user.id and credits_amount and not credit_manager.check_duplicate_session(db, session_id):
-                    credit_manager.add_credits(
-                        db, user.id, credits_amount,
-                        f"Purchased {plan_name} ({credits_amount} credits)",
-                        stripe_checkout_session_id=session_id,
-                    )
-                    payment = Payment(
-                        user_id=user.id,
-                        stripe_session_id=session_id,
-                        amount_cents=amount_cents,
-                        credits_purchased=credits_amount,
-                        plan_name=plan_name,
-                        status="completed",
-                    )
-                    db.add(payment)
-                    db.commit()
+            session = retrieve_checkout_session(session_id)
+            metadata = session.get("metadata") or {}
+            if str(metadata.get("user_id")) == str(user.id) and session.get("payment_status") == "paid":
+                credits_amount = int(metadata.get("credits", 0) or 0)
+                # Idempotent: if the webhook got here first this is a no-op.
+                if grant_from_checkout_session(db, session):
+                    credits_added = credits_amount
+                else:
+                    already_credited = True
                     credits_added = credits_amount
         except Exception as e:
-            import logging
             logging.getLogger(__name__).error(f"Failed to verify Stripe session: {e}")
 
     return _tpl(request).TemplateResponse(
         "pages/payment_success.html",
-        {"request": request, "user": user, "active_page": "credits", "credits_added": credits_added},
+        {
+            "request": request,
+            "user": user,
+            "active_page": "credits",
+            "credits_added": credits_added,
+            "already_credited": already_credited,
+        },
     )
 
 

@@ -1,15 +1,41 @@
-from fastapi import FastAPI, Request
-from fastapi.responses import RedirectResponse
+import logging
+from pathlib import Path
+
+from fastapi import FastAPI, Request, Response
+from fastapi.responses import RedirectResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from pathlib import Path
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 BASE_DIR = Path(__file__).resolve().parent
+logger = logging.getLogger(__name__)
+
+
+def _check_config() -> None:
+    """Fail fast on configuration that would silently break security."""
+    from app.config import get_settings
+
+    s = get_settings()
+    if s.session_secret in ("", "change-me", "change-me-to-a-64-byte-random-string"):
+        raise RuntimeError(
+            "SESSION_SECRET is not set. Generate one with: python -c 'import secrets; print(secrets.token_urlsafe(48))'"
+        )
+    if not s.encryption_key:
+        logger.error("ENCRYPTION_KEY is not set — saving or reading SMTP/Twilio/Hunter credentials will fail")
+    if s.stripe_secret_key and not s.stripe_webhook_secret:
+        logger.error("STRIPE_WEBHOOK_SECRET is not set — Stripe webhooks will be rejected until it is configured")
 
 
 def create_app() -> FastAPI:
+    _check_config()
+
     app = FastAPI(title="LeadBlitz v2", docs_url=None, redoc_url=None)
+
+    # Render terminates TLS at its load balancer and forwards X-Forwarded-For /
+    # X-Forwarded-Proto. Trust them so request.client.host is the real visitor
+    # (needed for signup IP dedup and rate limiting) and request.url.scheme is https.
+    app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
     # Static files
     app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
@@ -17,16 +43,23 @@ def create_app() -> FastAPI:
     # Templates (shared instance)
     app.state.templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
-    # 401 → redirect to /login for page requests
     @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(request: Request, exc: StarletteHTTPException):
         if exc.status_code == 401:
+            # HTMX follows a 302 transparently and would swap the login page into
+            # the target element. Tell it to navigate instead.
+            if request.headers.get("HX-Request"):
+                return Response(status_code=401, headers={"HX-Redirect": "/login"})
             return RedirectResponse("/login", status_code=302)
         return app.state.templates.TemplateResponse(
             "partials/error.html",
             {"request": request, "message": str(exc.detail)},
             status_code=exc.status_code,
         )
+
+    @app.get("/health", include_in_schema=False)
+    def health():
+        return PlainTextResponse("ok")
 
     # Routers
     from app.routers import (
@@ -50,5 +83,13 @@ def create_app() -> FastAPI:
     app.include_router(reports.router)
     app.include_router(analytics.router)
     app.include_router(admin.router)
+
+    @app.on_event("startup")
+    def _start_background_workers():
+        try:
+            from app.services.send_jobs import start_worker
+            start_worker()
+        except ImportError:
+            pass
 
     return app

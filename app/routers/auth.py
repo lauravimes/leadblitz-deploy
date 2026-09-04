@@ -1,19 +1,31 @@
+import logging
 import secrets
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Request, Response, Depends, Form
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, BackgroundTasks, Request, Response, Depends, Form
+from fastapi.responses import JSONResponse, RedirectResponse
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from app.deps import get_db, get_current_user
 from app.models import User
-from app.auth.passwords import hash_password, verify_password
+from app.auth.passwords import hash_password, verify_password, password_error
 from app.auth.sessions import create_token
+from app.services.rate_limit import (
+    client_ip,
+    login_limiter,
+    register_limiter,
+    forgot_password_limiter,
+)
 from app.services.system_email import send_system_email, build_branded_email
+from app.validation import is_valid_email, normalize_email
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["auth"])
+
+FREE_TRIAL_CREDITS = 200
 
 # Domains where multiple signups are expected (free email providers)
 PUBLIC_EMAIL_DOMAINS = {
@@ -23,12 +35,32 @@ PUBLIC_EMAIL_DOMAINS = {
     "gmx.com", "gmx.net", "fastmail.com", "tutanota.com", "hey.com",
 }
 
+# A hash to verify against when the email is unknown, so login timing does not
+# reveal whether an account exists.
+_DUMMY_HASH = hash_password("not-a-real-password-just-for-timing")
+
+
+def canonical_email(email: str) -> str:
+    """Collapse Gmail dot/plus aliases so foo+1@gmail.com and f.o.o@gmail.com are
+    treated as one address for trial-credit dedup."""
+    email = normalize_email(email)
+    if "@" not in email:
+        return email
+    local, domain = email.rsplit("@", 1)
+    if "+" in local:
+        local = local.split("+", 1)[0]
+    if domain in ("gmail.com", "googlemail.com"):
+        local = local.replace(".", "")
+        domain = "gmail.com"
+    return f"{local}@{domain}"
+
 
 def _should_grant_free_credits(db: Session, email: str, ip: Optional[str], exclude_user_id: int = None) -> bool:
     """Check whether a new signup should receive free trial credits.
 
     Returns False if:
     - A non-public email domain already has an existing account (domain dedup)
+    - The same canonical address (Gmail alias collapsed) already exists
     - The same IP registered another account in the last 30 days (IP dedup)
     """
     domain = email.rsplit("@", 1)[-1].lower()
@@ -41,8 +73,22 @@ def _should_grant_free_credits(db: Session, email: str, ip: Optional[str], exclu
         if q.first():
             return False
 
+    # Layer 1b: alias dedup for public providers (foo+1@gmail.com)
+    canon = canonical_email(email)
+    local, _, canon_domain = canon.partition("@")
+    if local and canon_domain in ("gmail.com",):
+        candidates = (
+            db.query(User.id, User.email)
+            .filter(func.lower(User.email).like(f"%@{domain}"))
+        )
+        if exclude_user_id:
+            candidates = candidates.filter(User.id != exclude_user_id)
+        for _uid, other in candidates.all():
+            if canonical_email(other) == canon:
+                return False
+
     # Layer 2: IP dedup (same IP signed up in last 30 days)
-    if ip:
+    if ip and ip != "unknown":
         cutoff = datetime.now(timezone.utc) - timedelta(days=30)
         q = (
             db.query(User.id)
@@ -56,12 +102,25 @@ def _should_grant_free_credits(db: Session, email: str, ip: Optional[str], exclu
     return True
 
 
-def _set_session(response: Response, user: User) -> Response:
+def _set_session(request: Request, response: Response, user: User) -> Response:
     token = create_token(user.id)
     response.set_cookie(
-        "session", token, httponly=True, samesite="lax", max_age=60 * 60 * 24 * 30,
+        "session",
+        token,
+        httponly=True,
+        samesite="lax",
+        secure=request.url.scheme == "https",
+        max_age=60 * 60 * 24 * 30,
     )
     return response
+
+
+def _error(request: Request, message: str, status_code: int = 200):
+    return request.app.state.templates.TemplateResponse(
+        "partials/error.html",
+        {"request": request, "message": message},
+        status_code=status_code,
+    )
 
 
 @router.post("/login")
@@ -71,18 +130,21 @@ def login(
     password: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    templates = request.app.state.templates
-    user = db.query(User).filter(User.email == email.lower().strip()).first()
+    ip = client_ip(request)
+    if not login_limiter.allow(f"login:{ip}"):
+        return _error(request, "Too many login attempts. Please wait a minute and try again.", 429)
 
-    if not user or not verify_password(password, user.password_hash):
-        return templates.TemplateResponse(
-            "partials/error.html",
-            {"request": request, "message": "Invalid email or password"},
-        )
+    email_clean = normalize_email(email)
+    user = db.query(User).filter(User.email == email_clean).first()
+
+    # Always run a bcrypt check so unknown emails take as long as wrong passwords.
+    ok = verify_password(password, user.password_hash if user else _DUMMY_HASH)
+    if not user or not ok or not user.is_active:
+        return _error(request, "Invalid email or password")
 
     response = Response(status_code=200)
     response.headers["HX-Redirect"] = "/search"
-    return _set_session(response, user)
+    return _set_session(request, response, user)
 
 
 @router.post("/register")
@@ -93,44 +155,54 @@ def register(
     password: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    templates = request.app.state.templates
-    email_clean = email.lower().strip()
+    ip = client_ip(request)
+    if not register_limiter.allow(f"register:{ip}"):
+        return _error(request, "Too many sign-ups from this network. Please try again later.", 429)
+
+    email_clean = normalize_email(email)
+    if not is_valid_email(email_clean):
+        return _error(request, "Please enter a valid email address")
+
+    full_name = (full_name or "").strip()[:255]
+    if not full_name:
+        return _error(request, "Please enter your name")
+
+    pw_err = password_error(password)
+    if pw_err:
+        return _error(request, pw_err)
 
     if db.query(User).filter(User.email == email_clean).first():
-        return templates.TemplateResponse(
-            "partials/error.html",
-            {"request": request, "message": "An account with that email already exists"},
-        )
+        return _error(request, "An account with that email already exists")
 
-    if len(password) < 8:
-        return templates.TemplateResponse(
-            "partials/error.html",
-            {"request": request, "message": "Password must be at least 8 characters"},
-        )
-
-    client_ip = request.client.host if request.client else None
+    client_addr = ip if ip != "unknown" else None
 
     user = User(
         email=email_clean,
         password_hash=hash_password(password),
-        full_name=full_name.strip(),
-        signup_ip=client_ip,
+        full_name=full_name,
+        signup_ip=client_addr,
     )
     db.add(user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return _error(request, "An account with that email already exists")
     db.refresh(user)
 
-    # Give 200 free trial credits — unless abuse detected
+    # Give free trial credits — unless abuse detected
     from app.services.credits import credit_manager
-    if _should_grant_free_credits(db, email_clean, client_ip, exclude_user_id=user.id):
-        credit_manager.add_credits(db, user.id, 200, "Free trial credits")
-        response = Response(status_code=200)
-        response.headers["HX-Redirect"] = "/search"
+    granted = _should_grant_free_credits(db, email_clean, client_addr, exclude_user_id=user.id)
+    if granted:
+        credit_manager.add_credits(db, user.id, FREE_TRIAL_CREDITS, "Free trial credits")
+        redirect = "/search"
     else:
-        response = Response(status_code=200)
-        response.headers["HX-Redirect"] = "/credits"
+        logger.info("Free trial credits withheld for user %s (%s, ip=%s)", user.id, email_clean, client_addr)
+        redirect = "/credits?trial=withheld"
 
-    return _set_session(response, user)
+    response = Response(status_code=200)
+    response.headers["HX-Redirect"] = redirect
+    return _set_session(request, response, user)
 
 
 @router.post("/logout")
@@ -143,22 +215,25 @@ def logout():
 
 @router.get("/logout")
 def logout_get():
-    from fastapi.responses import RedirectResponse
-    response = RedirectResponse("/login", status_code=302)
-    response.delete_cookie("session")
-    return response
+    # Side-effect-free: GET only points at the login page; logging out requires a POST.
+    return RedirectResponse("/login", status_code=302)
 
 
 @router.post("/forgot-password")
 def forgot_password(
     request: Request,
+    background_tasks: BackgroundTasks,
     email: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    templates = request.app.state.templates
-    user = db.query(User).filter(User.email == email.lower().strip()).first()
+    ip = client_ip(request)
+    if not forgot_password_limiter.allow(f"forgot:{ip}"):
+        return _error(request, "Too many reset requests. Please try again later.", 429)
 
-    # Always show success (don't reveal if email exists)
+    user = db.query(User).filter(User.email == normalize_email(email)).first()
+
+    # Always show the same message and do the same amount of work (email goes out
+    # in the background) so the response does not reveal whether the email exists.
     if user:
         token = secrets.token_urlsafe(32)
         user.reset_token = token
@@ -175,12 +250,9 @@ def forgot_password(
             button_url=reset_url,
             footer_note="If you didn't request this, you can safely ignore this email.",
         )
-        send_system_email(user.email, "Reset your LeadBlitz password", html)
+        background_tasks.add_task(send_system_email, user.email, "Reset your LeadBlitz password", html)
 
-    return templates.TemplateResponse(
-        "partials/error.html",
-        {"request": request, "message": "If that email exists, a reset link has been sent."},
-    )
+    return _error(request, "If that email exists, a reset link has been sent.")
 
 
 @router.post("/reset-password")
@@ -190,13 +262,9 @@ def reset_password(
     password: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    templates = request.app.state.templates
-
-    if len(password) < 8:
-        return templates.TemplateResponse(
-            "partials/error.html",
-            {"request": request, "message": "Password must be at least 8 characters"},
-        )
+    pw_err = password_error(password)
+    if pw_err:
+        return _error(request, pw_err)
 
     user = db.query(User).filter(
         User.reset_token == token,
@@ -204,10 +272,7 @@ def reset_password(
     ).first()
 
     if not user:
-        return templates.TemplateResponse(
-            "partials/error.html",
-            {"request": request, "message": "Invalid or expired reset link"},
-        )
+        return _error(request, "Invalid or expired reset link")
 
     user.password_hash = hash_password(password)
     user.reset_token = None

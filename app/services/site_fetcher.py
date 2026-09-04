@@ -8,10 +8,14 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 
+from app.services.url_safety import UnsafeURL, safe_get
+
 logger = logging.getLogger(__name__)
 
 
 def fetch_site_safely(url: str, timeout: int = 15, max_retries: int = 3) -> Dict[str, Any]:
+    """Fetch a page with retries. All requests go through ``safe_get`` so private /
+    internal addresses are refused and redirects are re-validated hop by hop."""
     user_agents = [
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -44,7 +48,7 @@ def fetch_site_safely(url: str, timeout: int = 15, max_retries: int = 3) -> Dict
         }
 
         try:
-            response = requests.get(url, timeout=timeout, headers=headers, allow_redirects=True, verify=True)
+            response = safe_get(url, timeout=timeout, headers=headers, verify=True)
             result["status"] = response.status_code
             result["final_url"] = response.url
             result["retries"] = attempt
@@ -58,7 +62,7 @@ def fetch_site_safely(url: str, timeout: int = 15, max_retries: int = 3) -> Dict
                         try:
                             clean_headers = headers.copy()
                             clean_headers.pop("Accept-Encoding", None)
-                            clean_resp = requests.get(url, timeout=timeout, headers=clean_headers, allow_redirects=True, verify=True)
+                            clean_resp = safe_get(url, timeout=timeout, headers=clean_headers, verify=True)
                             if clean_resp.status_code == 200 and clean_resp.text:
                                 result["html"] = clean_resp.text
                                 result["status"] = clean_resp.status_code
@@ -98,18 +102,24 @@ def fetch_site_safely(url: str, timeout: int = 15, max_retries: int = 3) -> Dict
             if attempt < max_retries - 1:
                 time.sleep(1 + attempt)
                 continue
+        except UnsafeURL as exc:
+            result["errors"].append(f"Blocked URL: {str(exc)[:100]}")
+            result["blocked_url"] = True
+            return result
         except requests.exceptions.SSLError:
             try:
-                response = requests.get(url, timeout=timeout, headers=headers, allow_redirects=True, verify=False)
+                response = safe_get(url, timeout=timeout, headers=headers, verify=False)
                 if response.status_code == 200:
                     result["html"] = response.text
                     result["status"] = response.status_code
                     result["final_url"] = response.url
                     result["errors"] = ["SSL warning (insecure)"]
+                    result["ssl_invalid"] = True
                     return result
             except Exception:
                 pass
             result["errors"].append("SSL certificate error")
+            result["ssl_invalid"] = True
             return result
         except requests.exceptions.ConnectionError:
             result["errors"].append(f"Connection failed (attempt {attempt + 1})")

@@ -1,12 +1,16 @@
 import logging
 
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
 _fernet = None
+
+
+def is_configured() -> bool:
+    return bool(get_settings().encryption_key)
 
 
 def _get_fernet() -> Fernet:
@@ -29,9 +33,16 @@ def encrypt(plain_text: str) -> str:
 
 
 def decrypt(encrypted_text: str) -> str:
+    """Decrypt a stored secret.
+
+    Returns "" only when the ciphertext is genuinely undecryptable with the current
+    key (InvalidToken). A missing ENCRYPTION_KEY raises so misconfiguration is loud
+    instead of silently turning every stored credential into an empty string.
+    """
     if not encrypted_text:
         return ""
     try:
         return _get_fernet().decrypt(encrypted_text.encode()).decode()
-    except Exception:
+    except InvalidToken:
+        logger.error("Stored secret could not be decrypted — ENCRYPTION_KEY may have been rotated")
         return ""

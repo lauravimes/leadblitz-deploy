@@ -1,24 +1,42 @@
 import logging
 
 from fastapi import APIRouter, Request, Depends, Form
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.deps import get_db, get_current_user
 from app.config import get_settings
-from app.models import User, Payment, UserSubscription
-from app.services.credits import credit_manager, CREDIT_COSTS
-from app.services.stripe_client import CREDIT_PACKAGES, create_checkout_session, verify_webhook_signature
+from app.models import Payment, UserSubscription
+from app.services.credits import credit_manager, CREDIT_COSTS, CREDIT_COST_LABELS
+from app.services.stripe_client import (
+    CREDIT_PACKAGES,
+    WebhookNotConfigured,
+    create_checkout_session,
+    verify_webhook_signature,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["credits"])
+
+
+def package_sold_out(db: Session, package_id: str) -> bool:
+    """Enforce ``max_buyers`` on limited packages (e.g. Founding Member)."""
+    package = CREDIT_PACKAGES.get(package_id)
+    if not package or not package.get("max_buyers"):
+        return False
+    sold = (
+        db.query(func.count(Payment.id))
+        .filter(Payment.plan_name == package["name"], Payment.status == "completed")
+        .scalar()
+    ) or 0
+    return sold >= package["max_buyers"]
 
 
 @router.get("/api/credits/balance")
 def get_balance(request: Request, db: Session = Depends(get_db)):
     user = get_current_user(request, db)
     balance = credit_manager.get_balance(db, user.id)
-    from fastapi.responses import HTMLResponse
     return HTMLResponse(str(balance))
 
 
@@ -35,6 +53,7 @@ def get_credits(request: Request, db: Session = Depends(get_db)):
             "credits": info,
             "packages": CREDIT_PACKAGES,
             "costs": CREDIT_COSTS,
+            "cost_labels": CREDIT_COST_LABELS,
             "active_page": "credits",
         },
     )
@@ -60,6 +79,15 @@ def checkout(
     user = get_current_user(request, db)
     info = credit_manager.get_user_credits(db, user.id)
 
+    if package_id not in CREDIT_PACKAGES:
+        return JSONResponse({"error": "Unknown package"}, status_code=400)
+    if package_sold_out(db, package_id):
+        return JSONResponse({"error": "This offer has sold out"}, status_code=400)
+
+    settings = get_settings()
+    if not settings.stripe_secret_key:
+        return JSONResponse({"error": "Payments are not configured"}, status_code=503)
+
     base_url = str(request.base_url).rstrip("/")
     try:
         result = create_checkout_session(
@@ -72,8 +100,44 @@ def checkout(
         )
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
+    except Exception:
+        logger.exception("Stripe checkout session creation failed for user %s", user.id)
+        return JSONResponse({"error": "Could not start checkout. Please try again."}, status_code=502)
 
     return JSONResponse({"url": result["url"]})
+
+
+def grant_from_checkout_session(db: Session, session: dict, stripe_event_id: str | None = None) -> bool:
+    """Shared by the webhook and the success page. ``session`` is a plain dict of a
+    Stripe Checkout Session. Returns True if credits were granted by this call."""
+    if session.get("payment_status") not in (None, "paid"):
+        return False
+    metadata = session.get("metadata") or {}
+    try:
+        user_id = int(metadata.get("user_id", 0))
+        credits_amount = int(metadata.get("credits", 0))
+        amount_cents = int(metadata.get("amount_cents", 0))
+    except (TypeError, ValueError):
+        return False
+    plan_name = metadata.get("plan_name", "")
+    session_id = session.get("id", "")
+    customer = session.get("customer")
+    if isinstance(customer, dict):
+        customer = customer.get("id")
+
+    if not user_id or not credits_amount or not session_id:
+        return False
+
+    return credit_manager.record_purchase(
+        db,
+        user_id=user_id,
+        credits_amount=credits_amount,
+        plan_name=plan_name,
+        amount_cents=amount_cents,
+        checkout_session_id=session_id,
+        stripe_event_id=stripe_event_id,
+        stripe_customer_id=customer if isinstance(customer, str) else None,
+    )
 
 
 @router.post("/api/stripe/webhook")
@@ -83,41 +147,23 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
 
     try:
         event = verify_webhook_signature(payload, sig)
+    except WebhookNotConfigured as e:
+        logger.error("[STRIPE WEBHOOK] %s", e)
+        return JSONResponse({"error": "Webhook not configured"}, status_code=503)
     except Exception as e:
-        logger.error(f"[STRIPE WEBHOOK] Signature verification failed: {e}")
+        logger.warning("[STRIPE WEBHOOK] Signature verification failed: %s", e)
         return JSONResponse({"error": "Invalid signature"}, status_code=400)
 
     event_type = event["type"]
     data = event["data"]
 
     if event_type == "checkout.session.completed":
-        metadata = data.get("metadata", {})
-        user_id = int(metadata.get("user_id", 0))
-        package_id = metadata.get("package_id", "")
-        credits_amount = int(metadata.get("credits", 0))
-        plan_name = metadata.get("plan_name", "")
-        amount_cents = int(metadata.get("amount_cents", 0))
-        session_id = data.get("id", "")
-
-        if user_id and credits_amount:
-            if not credit_manager.check_duplicate_session(db, session_id):
-                credit_manager.add_credits(
-                    db, user_id, credits_amount,
-                    f"Purchased {plan_name} ({credits_amount} credits)",
-                    stripe_checkout_session_id=session_id,
-                )
-                payment = Payment(
-                    user_id=user_id,
-                    stripe_session_id=session_id,
-                    amount_cents=amount_cents,
-                    credits_purchased=credits_amount,
-                    plan_name=plan_name,
-                    status="completed",
-                )
-                db.add(payment)
-                db.commit()
-                logger.info(f"[STRIPE] Added {credits_amount} credits to user {user_id}")
-
+        if data.get("payment_status") == "paid":
+            grant_from_checkout_session(db, data, stripe_event_id=event.get("id"))
+        else:
+            logger.info("[STRIPE] Session %s completed but not paid (%s)", data.get("id"), data.get("payment_status"))
+    elif event_type == "checkout.session.async_payment_succeeded":
+        grant_from_checkout_session(db, data, stripe_event_id=event.get("id"))
     elif event_type == "checkout.session.expired":
         logger.info("[STRIPE] Checkout session expired")
 

@@ -18,6 +18,11 @@ def fetch_mobile_speed(url: str, api_key: str, timeout: int = 30) -> Optional[Di
     if not url or not api_key:
         return None
 
+    from app.services.url_safety import is_safe_url
+    if not is_safe_url(url):
+        logger.info("PageSpeed skipped for non-public URL %s", url)
+        return None
+
     try:
         resp = requests.get(
             PAGESPEED_API_URL,

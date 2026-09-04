@@ -3,8 +3,8 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     Column, String, Integer, Float, Boolean, Text, DateTime, ForeignKey, JSON,
+    LargeBinary, Index,
 )
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -101,6 +101,10 @@ class Lead(Base):
     import_id = Column(String(36), ForeignKey("csv_imports.id", ondelete="SET NULL"), nullable=True)
     import_status = Column(String(50), nullable=True)  # queued / scoring / scored / unreachable / pending_credits
 
+    # Cached AI client report (regenerated when the lead is re-scored)
+    client_report = Column(JSON, nullable=True)
+    client_report_at = Column(DateTime(timezone=True), nullable=True)
+
     user = relationship("User", back_populates="leads")
     campaign = relationship("Campaign", back_populates="leads")
     csv_import = relationship("CsvImport", back_populates="leads")
@@ -113,6 +117,7 @@ class ScoreCache(Base):
     normalized_url = Column(Text, nullable=False)
     heuristic_result = Column(JSON, nullable=True)
     ai_result = Column(JSON, nullable=True)
+    technographics = Column(JSON, nullable=True)
     final_score = Column(Integer, default=0)
     confidence = Column(Float, default=0.5)
     fetched_at = Column(DateTime(timezone=True), default=_utcnow)
@@ -146,6 +151,15 @@ class CreditTransaction(Base):
     stripe_event_id = Column(String(255), unique=True, nullable=True)
     balance_after = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), default=_utcnow)
+
+    __table_args__ = (
+        Index(
+            "uq_credit_transactions_checkout_session",
+            "stripe_checkout_session_id",
+            unique=True,
+            postgresql_where=stripe_checkout_session_id.isnot(None),
+        ),
+    )
 
 
 class UserSubscription(Base):
@@ -285,3 +299,42 @@ class CsvImport(Base):
     created_at = Column(DateTime(timezone=True), default=_utcnow)
 
     leads = relationship("Lead", back_populates="csv_import")
+
+
+# --- Outreach jobs (DB-backed so they survive restarts) ---
+
+class SendJob(Base):
+    __tablename__ = "send_jobs"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    subject = Column(Text, nullable=False, default="")
+    body = Column(Text, nullable=False, default="")
+    attach_report = Column(Boolean, nullable=False, default=False)
+    attachment_name = Column(String(255), nullable=True)
+    attachment_mime = Column(String(255), nullable=True)
+    attachment_data = Column(LargeBinary, nullable=True)
+    send_rate_per_day = Column(Integer, nullable=False, default=0)  # 0 = send immediately
+    status = Column(String(20), nullable=False, default="queued")  # queued / running / completed / failed / cancelled
+    total = Column(Integer, nullable=False, default=0)
+    sent = Column(Integer, nullable=False, default=0)
+    failed = Column(Integer, nullable=False, default=0)
+    last_error = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    items = relationship("SendJobItem", back_populates="job", cascade="all, delete-orphan")
+
+
+class SendJobItem(Base):
+    __tablename__ = "send_job_items"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    job_id = Column(String(36), ForeignKey("send_jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    lead_id = Column(String(36), ForeignKey("leads.id", ondelete="CASCADE"), nullable=False, index=True)
+    status = Column(String(20), nullable=False, default="queued")  # queued / sent / failed / skipped
+    next_send_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    sent_at = Column(DateTime(timezone=True), nullable=True)
+    error = Column(Text, nullable=True)
+
+    job = relationship("SendJob", back_populates="items")

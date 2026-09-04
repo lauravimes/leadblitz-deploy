@@ -10,8 +10,9 @@ from sqlalchemy.orm import Session
 from app.deps import get_db, get_current_user
 from app.config import get_settings
 from app.models import User, UserAPIKeys, EmailSettings
-from app.auth.passwords import hash_password, verify_password
+from app.auth.passwords import hash_password, verify_password, password_error
 from app.services.encryption import encrypt, decrypt
+from app.validation import is_valid_email, normalize_email
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["settings"])
@@ -27,14 +28,16 @@ def update_profile(
     db: Session = Depends(get_db),
 ):
     user = get_current_user(request, db)
-    email_clean = email.lower().strip()
+    email_clean = normalize_email(email)
+    if not is_valid_email(email_clean):
+        return HTMLResponse('<div class="error-msg">Please enter a valid email address</div>')
 
     if email_clean != user.email:
         existing = db.query(User).filter(User.email == email_clean).first()
         if existing:
             return HTMLResponse('<div class="error-msg">Email already in use</div>')
 
-    user.full_name = full_name.strip()
+    user.full_name = (full_name or "").strip()[:255]
     user.email = email_clean
     db.commit()
     return HTMLResponse('<span class="saved-flash">Profile updated</span>')
@@ -52,8 +55,9 @@ def change_password(
     if not verify_password(current_password, user.password_hash):
         return HTMLResponse('<div class="error-msg">Current password is incorrect</div>')
 
-    if len(new_password) < 8:
-        return HTMLResponse('<div class="error-msg">New password must be at least 8 characters</div>')
+    pw_err = password_error(new_password)
+    if pw_err:
+        return HTMLResponse(f'<div class="error-msg">{pw_err}</div>')
 
     user.password_hash = hash_password(new_password)
     db.commit()
@@ -64,15 +68,19 @@ def change_password(
 
 @router.get("/api/settings/api-keys")
 def get_api_keys(request: Request, db: Session = Depends(get_db)):
+    """Small partial showing which integrations are configured (never the secrets)."""
     user = get_current_user(request, db)
     keys = db.query(UserAPIKeys).filter_by(user_id=user.id).first()
-    return JSONResponse({
-        "twilio_account_sid": keys.twilio_account_sid or "" if keys else "",
-        "twilio_phone_number": keys.twilio_phone_number or "" if keys else "",
-        "hunter_api_key": (keys.hunter_api_key[:8] + "...") if keys and keys.hunter_api_key else "",
-        "has_twilio": bool(keys and keys.twilio_account_sid and keys.twilio_auth_token),
-        "has_hunter": bool(keys and keys.hunter_api_key),
-    })
+    return request.app.state.templates.TemplateResponse(
+        "partials/api_keys_status.html",
+        {
+            "request": request,
+            "has_twilio": bool(keys and keys.twilio_account_sid and keys.twilio_auth_token and keys.twilio_phone_number),
+            "twilio_phone": (keys.twilio_phone_number or "") if keys else "",
+            "twilio_sid_hint": (keys.twilio_account_sid[-4:] if keys and keys.twilio_account_sid else ""),
+            "has_hunter": bool(keys and keys.hunter_api_key),
+        },
+    )
 
 
 @router.post("/api/settings/api-keys")

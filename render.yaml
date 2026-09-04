@@ -1,5 +1,7 @@
 databases:
   - name: leadblitz-db
+    # NOTE: Render deletes free Postgres instances 90 days after creation.
+    # This database holds users, credits and payments — move it to a paid plan.
     plan: free
     databaseName: leadblitz
     user: leadblitz
@@ -10,7 +12,10 @@ services:
     runtime: python
     plan: free
     buildCommand: ./build.sh
-    startCommand: uvicorn app:create_app --factory --host 0.0.0.0 --port $PORT
+    # ProxyHeadersMiddleware (app/__init__.py) trusts X-Forwarded-For/Proto from
+    # Render's load balancer, so request.client.host is the real visitor IP.
+    startCommand: uvicorn app:create_app --factory --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips='*'
+    healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
         value: "3.11.11"
@@ -30,8 +35,9 @@ services:
         sync: false
       - key: STRIPE_SECRET_KEY
         sync: false
+      # Required: webhooks are rejected (not trusted unsigned) when this is empty.
       - key: STRIPE_WEBHOOK_SECRET
-        value: ""
+        sync: false
       - key: SMTP_HOST
         value: smtp.gmail.com
       - key: SMTP_PORT

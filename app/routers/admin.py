@@ -1,39 +1,48 @@
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Request, Depends, Form, HTTPException
+from fastapi import APIRouter, Request, Depends, Form
 from fastapi.responses import HTMLResponse
+from markupsafe import escape
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from app.deps import get_db, get_current_user
+from app.deps import get_db, require_admin
 from app.models import User, UserCredits, CreditTransaction, Lead, Campaign, Payment
 from app.services.credits import credit_manager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["admin"])
 
+MAX_ADMIN_GRANT = 100_000
 
-def _check_admin(user: User):
-    if not user.is_admin:
-        raise HTTPException(status_code=403, detail="Admin access required")
+
+def _flash(message: str) -> HTMLResponse:
+    return HTMLResponse(f'<span class="saved-flash">{escape(message)}</span>')
+
+
+def _err(message: str, status_code: int = 200) -> HTMLResponse:
+    return HTMLResponse(f'<div class="error-msg">{escape(message)}</div>', status_code=status_code)
 
 
 @router.get("/api/admin/users")
 def list_users(request: Request, db: Session = Depends(get_db)):
-    user = get_current_user(request, db)
-    _check_admin(user)
+    require_admin(request, db)
+
+    lead_counts = dict(
+        db.query(Lead.user_id, func.count(Lead.id)).group_by(Lead.user_id).all()
+    )
+    spend = dict(
+        db.query(Payment.user_id, func.coalesce(func.sum(Payment.amount_cents), 0))
+        .filter(Payment.status == "completed")
+        .group_by(Payment.user_id)
+        .all()
+    )
+    balances = dict(db.query(UserCredits.user_id, UserCredits.balance).all())
 
     users = db.query(User).order_by(User.created_at.desc()).all()
     rows = []
     for u in users:
-        credits = db.query(UserCredits).filter(UserCredits.user_id == u.id).first()
-        lead_count = db.query(func.count(Lead.id)).filter(Lead.user_id == u.id).scalar() or 0
-        total_spent = (
-            db.query(func.coalesce(func.sum(Payment.amount_cents), 0))
-            .filter(Payment.user_id == u.id, Payment.status == "completed")
-            .scalar()
-        )
         domain = u.email.rsplit("@", 1)[-1] if "@" in u.email else ""
         rows.append({
             "id": u.id,
@@ -42,10 +51,10 @@ def list_users(request: Request, db: Session = Depends(get_db)):
             "domain": domain,
             "is_admin": u.is_admin,
             "created_at": u.created_at,
-            "balance": credits.balance if credits else 0,
+            "balance": balances.get(u.id) or 0,
             "signup_ip": u.signup_ip or "—",
-            "lead_count": lead_count,
-            "total_spent_cents": total_spent,
+            "lead_count": lead_counts.get(u.id, 0),
+            "total_spent_cents": spend.get(u.id, 0),
         })
 
     templates = request.app.state.templates
@@ -62,15 +71,19 @@ def admin_add_credits(
     amount: int = Form(...),
     db: Session = Depends(get_db),
 ):
-    user = get_current_user(request, db)
-    _check_admin(user)
+    user = require_admin(request, db)
+
+    if amount <= 0 or amount > MAX_ADMIN_GRANT:
+        return _err(f"Amount must be between 1 and {MAX_ADMIN_GRANT}")
 
     target = db.query(User).filter(User.id == user_id).first()
     if not target:
-        return HTMLResponse('<div class="error-msg">User not found</div>')
+        return _err("User not found")
 
-    new_balance = credit_manager.add_credits(db, user_id, amount, f"Admin grant by {user.email}")
-    return HTMLResponse(f'<span class="saved-flash">Added {amount} credits to {target.email} (balance: {new_balance})</span>')
+    new_balance = credit_manager.add_credits(
+        db, user_id, amount, f"Admin grant by {user.email}", transaction_type="admin_grant",
+    )
+    return _flash(f"Added {amount} credits to {target.email} (balance: {new_balance})")
 
 
 @router.post("/api/admin/credits/set")
@@ -80,14 +93,16 @@ def admin_set_credits(
     balance: int = Form(...),
     db: Session = Depends(get_db),
 ):
-    user = get_current_user(request, db)
-    _check_admin(user)
+    user = require_admin(request, db)
+
+    if balance < 0 or balance > MAX_ADMIN_GRANT:
+        return _err(f"Balance must be between 0 and {MAX_ADMIN_GRANT}")
 
     target = db.query(User).filter(User.id == user_id).first()
     if not target:
-        return HTMLResponse('<div class="error-msg">User not found</div>')
+        return _err("User not found")
 
-    credits = db.query(UserCredits).filter(UserCredits.user_id == user_id).first()
+    credits = db.query(UserCredits).filter(UserCredits.user_id == user_id).with_for_update().first()
     if not credits:
         credits = UserCredits(user_id=user_id, balance=0, total_purchased=0, total_used=0)
         db.add(credits)
@@ -109,7 +124,7 @@ def admin_set_credits(
     db.add(transaction)
     db.commit()
 
-    return HTMLResponse(f'<span class="saved-flash">Set {target.email} balance to {balance} credits (was {old_balance})</span>')
+    return _flash(f"Set {target.email} balance to {balance} credits (was {old_balance})")
 
 
 @router.post("/api/admin/toggle-admin")
@@ -118,21 +133,20 @@ def toggle_admin(
     user_id: int = Form(...),
     db: Session = Depends(get_db),
 ):
-    user = get_current_user(request, db)
-    _check_admin(user)
+    user = require_admin(request, db)
 
     target = db.query(User).filter(User.id == user_id).first()
     if not target:
-        return HTMLResponse('<div class="error-msg">User not found</div>')
+        return _err("User not found")
 
     if target.id == user.id:
-        return HTMLResponse('<div class="error-msg">Cannot change your own admin status</div>')
+        return _err("Cannot change your own admin status")
 
     target.is_admin = not target.is_admin
     db.commit()
 
     status = "admin" if target.is_admin else "regular user"
-    return HTMLResponse(f'<span class="saved-flash">{target.email} is now {status}</span>')
+    return _flash(f"{target.email} is now {status}")
 
 
 @router.post("/api/admin/backfill-emailed")
@@ -141,8 +155,7 @@ def backfill_emailed(
     db: Session = Depends(get_db),
 ):
     """Mark all leads that have an email but no last_emailed_at as emailed once."""
-    user = get_current_user(request, db)
-    _check_admin(user)
+    require_admin(request, db)
 
     leads = db.query(Lead).filter(
         Lead.email.isnot(None),
@@ -159,18 +172,17 @@ def backfill_emailed(
         count += 1
     db.commit()
 
-    return HTMLResponse(f'<span class="saved-flash">Backfilled {count} leads as emailed</span>')
+    return _flash(f"Backfilled {count} leads as emailed")
 
 
 @router.get("/api/admin/users/{user_id}")
 def user_detail(user_id: int, request: Request, db: Session = Depends(get_db)):
     """Expanded user detail panel — loaded via HTMX into admin page."""
-    user = get_current_user(request, db)
-    _check_admin(user)
+    require_admin(request, db)
 
     target = db.query(User).filter(User.id == user_id).first()
     if not target:
-        return HTMLResponse('<div class="error-msg">User not found</div>')
+        return _err("User not found")
 
     credits = db.query(UserCredits).filter(UserCredits.user_id == user_id).first()
 
@@ -210,17 +222,17 @@ def user_detail(user_id: int, request: Request, db: Session = Depends(get_db)):
     linked_accounts = []
     if target.signup_ip:
         linked = (
-            db.query(User)
+            db.query(User, UserCredits.balance)
+            .outerjoin(UserCredits, UserCredits.user_id == User.id)
             .filter(User.signup_ip == target.signup_ip, User.id != user_id)
             .all()
         )
-        for la in linked:
-            la_credits = db.query(UserCredits).filter(UserCredits.user_id == la.id).first()
+        for la, balance in linked:
             linked_accounts.append({
                 "id": la.id,
                 "email": la.email,
                 "created_at": la.created_at,
-                "balance": la_credits.balance if la_credits else 0,
+                "balance": balance or 0,
             })
 
     domain = target.email.rsplit("@", 1)[-1] if "@" in target.email else ""

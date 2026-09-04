@@ -1,0 +1,19 @@
+<div class="subtext" style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:12px">
+  <span>
+    Twilio:
+    {% if has_twilio %}
+      <span class="stage stage-qualified">Connected</span>
+      <span>{{ twilio_phone }}{% if twilio_sid_hint %} · SID …{{ twilio_sid_hint }}{% endif %}</span>
+    {% else %}
+      <span class="stage stage-new">Not set up</span>
+    {% endif %}
+  </span>
+  <span>
+    Hunter.io:
+    {% if has_hunter %}
+      <span class="stage stage-qualified">Key saved</span>
+    {% else %}
+      <span class="stage stage-new">Not set up</span>
+    {% endif %}
+  </span>
+</div>

@@ -4,29 +4,33 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "leadblitz-v2"
-version = "2.0.0"
+version = "2.1.0"
 description = "Lead generation SaaS — Find, Score, Review"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
+# Upper bounds guard against the surprise major bumps that broke prod (stripe 15,
+# bcrypt 5). Exact versions are locked in requirements.txt (see build.sh).
 dependencies = [
-    "fastapi<0.112.0",
-    "uvicorn[standard]",
-    "jinja2",
-    "sqlalchemy>=2.0",
-    "psycopg2-binary",
-    "alembic",
-    "pydantic-settings",
-    "python-dotenv",
-    "itsdangerous",
-    "passlib[bcrypt]",
-    "python-multipart",
-    "openai",
-    "requests",
-    "beautifulsoup4",
-    "httpx",
-    "cryptography",
-    "stripe",
-    "twilio",
-    "reportlab",
+    "fastapi>=0.111,<0.112",
+    "uvicorn[standard]>=0.30,<1",
+    "jinja2>=3.1,<4",
+    "markupsafe>=2.1,<4",
+    "sqlalchemy>=2.0,<3",
+    "psycopg2-binary>=2.9,<3",
+    "alembic>=1.13,<2",
+    "pydantic-settings>=2.2,<3",
+    "python-dotenv>=1.0,<2",
+    "itsdangerous>=2.1,<3",
+    "bcrypt>=4.1,<6",
+    "python-multipart>=0.0.9,<1",
+    "openai>=1.30,<3",
+    "requests>=2.31,<3",
+    "beautifulsoup4>=4.12,<5",
+    "httpx>=0.27,<1",
+    "cryptography>=42,<47",
+    "stripe>=15,<16",
+    "twilio>=9,<10",
+    "reportlab>=4.1,<5",
+    "phonenumbers>=8.13,<10",
 ]
 
 [tool.setuptools.packages.find]
@@ -34,3 +38,7 @@ include = ["app*"]
 
 [project.optional-dependencies]
 dev = ["ruff", "pytest", "pytest-asyncio"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]

@@ -60,8 +60,12 @@ def extract_domain(website: str) -> Optional[str]:
 
 
 def _fetch_page(url: str, timeout: int = 10) -> Tuple[str, str]:
+    """Fetch a page for email scraping. Goes through ``safe_get`` so lead websites
+    (which come from Google Places or user CSVs) cannot point us at internal hosts."""
+    from app.services.url_safety import safe_get
+
     try:
-        resp = requests.get(url, timeout=timeout, headers=HEADERS, verify=True, allow_redirects=True)
+        resp = safe_get(url, timeout=timeout, headers=HEADERS, verify=True)
         if resp.status_code == 200:
             return (url, resp.text)
     except Exception:

@@ -1,40 +1,75 @@
+{% if total_leads == 0 %}
+{# First run: nothing to count yet — show the three steps that get to a sent report #}
+<div class="card">
+  <h2>Get your first client-ready audit in three steps</h2>
+  <p class="subtext">You have credits waiting. Here's the fastest route from zero to a report in a prospect's inbox.</p>
+  <div class="checklist">
+    <a href="/search" class="card card-compact check-step">
+      <span class="check-num">1</span>
+      <h3>Search for leads</h3>
+      <p>Pick a business type and a town. We pull up to 20 local businesses with their websites, phone numbers and any emails we can find.</p>
+      <span class="cost">1 credit per search</span>
+    </a>
+    <a href="/leads" class="card card-compact check-step">
+      <span class="check-num">2</span>
+      <h3>Score a website</h3>
+      <p>Score any lead to audit its site across 11 dimensions. Low scores are your best prospects — the report writes the pitch for you.</p>
+      <span class="cost">1 credit per lead</span>
+    </a>
+    <a href="/leads?scored=1" class="card card-compact check-step">
+      <span class="check-num">3</span>
+      <h3>Send the report</h3>
+      <p>Open a scored lead, download the PDF audit or email it with an AI-written note. Track replies with stages and notes.</p>
+      <span class="cost">Email send is free · AI-written email 1 credit</span>
+    </a>
+  </div>
+  <p class="subtext mt-16">Already have a list? <a href="/import">Import a CSV</a> instead of searching.</p>
+</div>
+{% else %}
 <div class="stats-grid">
   <a href="/leads" class="stat-link card card-compact">
     <p class="label">Total leads</p>
-    <p style="font-size:1.6rem;font-weight:700">{{ total_leads }}</p>
+    <p class="stat-value">{{ total_leads }}</p>
   </a>
   <a href="/leads?scored=1" class="stat-link card card-compact">
     <p class="label">Scored</p>
-    <p style="font-size:1.6rem;font-weight:700">{{ scored_leads }}</p>
+    <p class="stat-value">{{ scored_leads }}</p>
   </a>
   <div class="card card-compact">
     <p class="label">Avg score</p>
-    <p style="font-size:1.6rem;font-weight:700">{{ avg_score }}</p>
+    <p class="stat-value">{{ avg_score }}</p>
   </div>
   <a href="/campaigns" class="stat-link card card-compact">
     <p class="label">Campaigns</p>
-    <p style="font-size:1.6rem;font-weight:700">{{ total_campaigns }}</p>
+    <p class="stat-value">{{ total_campaigns }}</p>
   </a>
   <div class="card card-compact">
     <p class="label">Emails sent</p>
-    <p style="font-size:1.6rem;font-weight:700">{{ emails_sent }}</p>
+    <p class="stat-value">{{ emails_sent }}</p>
   </div>
   <div class="card card-compact">
     <p class="label">SMS sent</p>
-    <p style="font-size:1.6rem;font-weight:700">{{ sms_sent }}</p>
+    <p class="stat-value">{{ sms_sent }}</p>
   </div>
 </div>
 
+{% if scored_leads == 0 %}
+<div class="notice mt-16">
+  <strong>Next step:</strong> none of your {{ total_leads }} lead{{ 's' if total_leads != 1 }} are scored yet. <a href="/leads">Score a lead</a> (1 credit) to unlock its audit report and personalised email.
+</div>
+{% endif %}
+
 {% if by_stage %}
-<div class="card" style="margin-top:16px">
+<div class="card mt-16">
   <p class="label">Leads by stage</p>
-  <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px">
+  <div class="row gap-16 mt-8">
     {% for stage, count in by_stage.items() %}
-    <div>
+    <a href="/leads?stage={{ stage }}" class="link-plain">
       <span class="stage stage-{{ stage }}">{{ stage }}</span>
-      <span style="font-weight:600;margin-left:4px">{{ count }}</span>
-    </div>
+      <span class="fw-600 ml-8">{{ count }}</span>
+    </a>
     {% endfor %}
   </div>
 </div>
+{% endif %}
 {% endif %}

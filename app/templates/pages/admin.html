@@ -1,60 +1,59 @@
 {% extends "base.html" %}
 {% block title %}Admin — LeadBlitz{% endblock %}
+{% block container_class %}container container-wide{% endblock %}
 
 {% block content %}
 <div class="section-header">
   <h1>Admin</h1>
 </div>
 
-<div class="card">
-  <h2>Add credits</h2>
-  <form hx-post="/api/admin/credits/add" hx-target="#admin-flash" hx-swap="innerHTML" hx-on::after-request="refreshAdmin()" style="margin-top:12px">
-    <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap">
-      <div class="form-group" style="margin-bottom:0;flex:1;min-width:140px">
-        <label>User ID</label>
-        <input type="number" name="user_id" required placeholder="e.g. 2">
+<div class="grid-2">
+  <div class="card">
+    <h2>Add credits</h2>
+    <form class="admin-inline-form" hx-post="/api/admin/credits/add" hx-target="#admin-flash" hx-swap="innerHTML" hx-on::after-request="refreshAdmin()">
+      <div class="form-group grow">
+        <label for="add-user-id">User ID</label>
+        <input type="number" id="add-user-id" name="user_id" required placeholder="e.g. 2" min="1">
       </div>
-      <div class="form-group" style="margin-bottom:0;width:120px">
-        <label>Credits to add</label>
-        <input type="number" name="amount" required placeholder="e.g. 100">
+      <div class="form-group narrow">
+        <label for="add-amount">Credits to add</label>
+        <input type="number" id="add-amount" name="amount" required placeholder="e.g. 100" min="1">
       </div>
       <button type="submit" class="btn btn-primary btn-sm">Add credits</button>
-    </div>
-  </form>
-</div>
+    </form>
+  </div>
 
-<div class="card">
-  <h2>Set balance</h2>
-  <form hx-post="/api/admin/credits/set" hx-target="#admin-flash" hx-swap="innerHTML" hx-on::after-request="refreshAdmin()" style="margin-top:12px">
-    <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap">
-      <div class="form-group" style="margin-bottom:0;flex:1;min-width:140px">
-        <label>User ID</label>
-        <input type="number" name="user_id" required placeholder="e.g. 2">
+  <div class="card">
+    <h2>Set balance</h2>
+    <form class="admin-inline-form" hx-post="/api/admin/credits/set" hx-target="#admin-flash" hx-swap="innerHTML" hx-on::after-request="refreshAdmin()">
+      <div class="form-group grow">
+        <label for="set-user-id">User ID</label>
+        <input type="number" id="set-user-id" name="user_id" required placeholder="e.g. 2" min="1">
       </div>
-      <div class="form-group" style="margin-bottom:0;width:120px">
-        <label>New balance</label>
-        <input type="number" name="balance" required placeholder="e.g. 100">
+      <div class="form-group narrow">
+        <label for="set-balance">New balance</label>
+        <input type="number" id="set-balance" name="balance" required placeholder="e.g. 100" min="0">
       </div>
       <button type="submit" class="btn btn-primary btn-sm">Set balance</button>
-    </div>
-  </form>
+    </form>
+  </div>
 </div>
 
-<div id="admin-flash" style="margin-bottom:16px"></div>
+<div id="admin-flash" class="mb-16" aria-live="polite"></div>
 
 <!-- User detail panel (loaded via HTMX when clicking a user) -->
-<div id="user-detail-panel" style="margin-bottom:16px"></div>
+<div id="user-detail-panel" class="mb-16"></div>
 
 <div class="card">
   <h2>Users</h2>
-  <div id="user-list" hx-get="/api/admin/users" hx-trigger="load" hx-swap="innerHTML" style="margin-top:12px">
+  <div id="user-list" class="mt-12" hx-get="/api/admin/users" hx-trigger="load" hx-swap="innerHTML">
     <p class="subtext">Loading...</p>
   </div>
 </div>
 
 <script>
 function refreshAdmin() {
-  htmx.ajax('GET', '/api/credits/balance', {target: '#nav-credits', swap: 'innerHTML'});
+  htmx.trigger(document.body, 'creditsChanged');
   htmx.ajax('GET', '/api/admin/users', {target: '#user-list', swap: 'innerHTML'});
 }
 </script>

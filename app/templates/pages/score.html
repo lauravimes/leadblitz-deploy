@@ -4,70 +4,52 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Free Website Score — LeadBlitz</title>
-  <meta name="description" content="Paste any website URL and get an instant AI-powered score across 12+ dimensions. Free, no signup required.">
+  <meta name="description" content="Paste any website URL and get an instant AI-powered score across 11 dimensions. Free, no signup required.">
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/style.css">
   <link rel="stylesheet" href="/static/landing.css">
   <script src="https://unpkg.com/htmx.org@2.0.4"></script>
 </head>
 <body>
-
-  <!-- Nav -->
-  <nav class="landing-nav">
-    <div class="landing-container">
-      <a href="/" class="logo">LeadBlitz</a>
-      <button class="landing-hamburger" aria-label="Menu">
-        <span></span><span></span><span></span>
-      </button>
-      <div class="landing-nav-links" id="landing-menu">
-        <a href="/#features">Features</a>
-        <a href="/#pricing">Pricing</a>
-        <a href="/blog">Blog</a>
-        <a href="/score">Free Score</a>
-        {% if user %}
-        <a href="/dashboard" class="btn btn-primary btn-sm">Dashboard</a>
-        {% else %}
-        <a href="/login">Login</a>
-        <a href="/register" class="btn btn-primary btn-sm">Start free</a>
-        {% endif %}
-      </div>
-    </div>
-  </nav>
+  {% set active_page = "score" %}
+  {% include "partials/public_nav.html" %}
 
   <!-- Hero -->
   <section class="hero" style="padding-bottom:0">
     <div class="landing-container">
       <p class="hero-badge">Free tool</p>
       <h1 class="hero-title" style="font-size:2.4rem">Score any website<br>in seconds</h1>
-      <p class="hero-sub">Paste a URL below. Our AI analyses 12+ dimensions and gives you<br>an instant, actionable website audit.</p>
+      <p class="hero-sub">Paste a URL below. Our AI analyses 11 dimensions and gives you<br>an instant, actionable website audit.</p>
 
       <!-- Score form -->
       <form
+        class="score-form"
         hx-post="/score"
         hx-target="#score-result"
         hx-indicator="#score-spinner"
-        style="max-width:520px;margin:32px auto 0"
       >
-        <div style="display:flex;gap:8px">
+        <label class="sr-only" for="score-url">Website URL</label>
+        <div class="score-form-row">
           <input
             type="text"
+            id="score-url"
             name="url"
             placeholder="e.g. example.com"
             required
             autocomplete="url"
-            style="flex:1"
+            inputmode="url"
           >
           <button type="submit" class="btn btn-primary">Score it</button>
         </div>
-        <p class="subtext" style="margin-top:8px;text-align:center">Free. No signup required. Results in ~15 seconds.</p>
+        <p class="subtext mt-8 text-center">Free. No signup required. Results in ~15 seconds.</p>
       </form>
 
       <!-- Loading spinner -->
-      <div id="score-spinner" class="htmx-indicator" style="text-align:center;padding:40px 0">
+      <div id="score-spinner" class="htmx-indicator score-spinner" role="status" aria-live="polite">
         <div class="score-loading">
           <div class="score-loading-bar"></div>
         </div>
-        <p class="subtext" style="margin-top:12px">Analysing website across 12+ dimensions...</p>
+        <p class="subtext mt-12">Analysing website across 11 dimensions...</p>
       </div>
     </div>
   </section>
@@ -81,7 +63,7 @@
   <section class="section section-alt">
     <div class="landing-container">
       <p class="section-label">What we analyse</p>
-      <h2 class="section-title">12+ dimensions. Instant results.</h2>
+      <h2 class="section-title">11 dimensions. Instant results.</h2>
       <p class="section-sub">The same audit web designers charge hundreds for — free.</p>
 
       <div class="steps-grid">
@@ -115,10 +97,10 @@
 
   <!-- CTA -->
   <section class="section cta-section">
-    <div class="landing-container" style="text-align:center">
+    <div class="landing-container text-center">
       <h2 class="section-title">Want the full toolkit?</h2>
       <p class="section-sub">Search for leads, generate branded PDF reports, and send outreach — all in one place.</p>
-      <a href="/register" class="btn btn-primary" style="margin-top:16px">Start free — 200 credits included</a>
+      <a href="/register" class="btn btn-primary mt-16">Start free — 200 credits included</a>
     </div>
   </section>
 
@@ -143,20 +125,11 @@
     </div>
   </footer>
 
-  <script>
-  (function(){
-    var btn = document.querySelector('.landing-hamburger');
-    var menu = document.getElementById('landing-menu');
-    if(btn && menu){
-      btn.addEventListener('click', function(){
-        btn.classList.toggle('open');
-        menu.classList.toggle('open');
-      });
-    }
-  })();
-  </script>
-
   <style>
+  .score-form{max-width:520px;margin:32px auto 0}
+  .score-form-row{display:flex;gap:8px}
+  .score-form-row input{flex:1}
+  .score-spinner{text-align:center;padding:40px 0}
   /* Loading animation */
   .score-loading{width:200px;height:4px;background:var(--border);border-radius:2px;margin:0 auto;overflow:hidden}
   .score-loading-bar{width:40%;height:100%;background:var(--accent);border-radius:2px;animation:score-slide 1.5s ease-in-out infinite}

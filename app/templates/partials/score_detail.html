@@ -4,21 +4,27 @@
 {% set report = breakdown.get('plain_english_report', {}) %}
 {% set tech = lead.technographics or {} %}
 
-<div class="card" style="margin-top:16px">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-    <h2>Score breakdown</h2>
-    <span class="score {{ 'score-high' if lead.score >= 70 else ('score-mid' if lead.score >= 40 else 'score-low') }}" style="font-size:1.2rem">{{ lead.score }}/100</span>
+<div class="card mt-16">
+  <div class="row row-between mb-16">
+    <h2 class="mb-0">Score breakdown</h2>
+    <span class="score score-lg {{ 'score-high' if lead.score >= 70 else ('score-mid' if lead.score >= 40 else 'score-low') }}">{{ lead.score }}/100</span>
   </div>
 
-  <div style="display:flex;gap:24px;margin-bottom:16px">
+  <div class="row gap-24 mb-16">
     <div>
       <p class="label">Heuristic</p>
-      <span style="font-family:var(--mono);font-size:1.1rem;font-weight:600">{{ lead.heuristic_score or 0 }}/50</span>
+      <span class="score-part">{{ lead.heuristic_score or 0 }}/50</span>
     </div>
     <div>
       <p class="label">AI</p>
-      <span style="font-family:var(--mono);font-size:1.1rem;font-weight:600">{{ lead.ai_score or 0 }}/50</span>
+      <span class="score-part">{{ lead.ai_score or 0 }}/50</span>
     </div>
+    {% if lead.last_scored_at %}
+    <div>
+      <p class="label">Scored</p>
+      <span class="subtext">{{ lead.last_scored_at.strftime('%d %b %Y') }}</span>
+    </div>
+    {% endif %}
   </div>
 
   {% if heuristic %}
@@ -34,7 +40,7 @@
   {% endif %}
 
   {% if ai %}
-  <p class="label" style="margin-top:20px">AI review</p>
+  <p class="label mt-24">AI review</p>
   <div class="breakdown-grid">
     <div class="breakdown-item"><span class="breakdown-label">Brand</span><span class="breakdown-score">{{ ai.get('brand', 0) }}/12</span></div>
     <div class="breakdown-item"><span class="breakdown-label">Visual</span><span class="breakdown-score">{{ ai.get('visual', 0) }}/10</span></div>
@@ -50,7 +56,7 @@
 <div hx-get="/api/pagespeed?url={{ lead.website | urlencode }}"
      hx-trigger="load"
      hx-swap="outerHTML">
-  <div class="card report-section" style="text-align:center">
+  <div class="card report-section text-center">
     <span class="subtext">Loading mobile speed score...</span>
   </div>
 </div>
@@ -61,7 +67,7 @@
   <h3>Analysis</h3>
 
   {% if report.get('strengths') %}
-  <p class="label" style="margin-top:12px">Strengths</p>
+  <p class="label mt-12">Strengths</p>
   <ul class="report-list">
     {% for item in report.get('strengths', []) %}
     <li>{{ item }}</li>
@@ -70,7 +76,7 @@
   {% endif %}
 
   {% if report.get('weaknesses') %}
-  <p class="label" style="margin-top:12px">Weaknesses</p>
+  <p class="label mt-12">Weaknesses</p>
   <ul class="report-list">
     {% for item in report.get('weaknesses', []) %}
     <li>{{ item }}</li>
@@ -79,7 +85,7 @@
   {% endif %}
 
   {% if report.get('sales_opportunities') %}
-  <p class="label" style="margin-top:12px">Sales opportunities</p>
+  <p class="label mt-12">Sales opportunities</p>
   <ul class="report-list">
     {% for item in report.get('sales_opportunities', []) %}
     <li>{{ item }}</li>
@@ -88,8 +94,8 @@
   {% endif %}
 
   {% if report.get('technology_observations') %}
-  <p class="label" style="margin-top:12px">Technology</p>
-  <p style="font-size:.9rem;line-height:1.5">{{ report.get('technology_observations', '') }}</p>
+  <p class="label mt-12">Technology</p>
+  <p class="report-text">{{ report.get('technology_observations', '') }}</p>
   {% endif %}
 </div>
 {% endif %}
@@ -98,13 +104,13 @@
 {% set health = classify_tech_health(tech) if classify_tech_health else {} %}
 <div class="card report-section">
   <h3>Technographics</h3>
-  <div style="margin-top:10px">
+  <div class="mt-8">
     {% set cms = tech.get('cms', {}) %}
     {% if cms.get('name') and cms.get('name') != 'Custom/Unknown' %}
-    <p style="font-size:.9rem;margin-bottom:8px"><strong>CMS:</strong> {{ cms.get('name') }}{% if tech.get('cms_version') %} {{ tech.get('cms_version') }}{% endif %}</p>
+    <p class="report-text mb-8"><strong>CMS:</strong> {{ cms.get('name') }}{% if tech.get('cms_version') %} {{ tech.get('cms_version') }}{% endif %}</p>
     {% endif %}
 
-    <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px">
+    <div class="row gap-4 mt-8">
       {% for item in health.get('green', []) %}
       <span class="tech-signal tech-green">{{ item.label }}</span>
       {% endfor %}

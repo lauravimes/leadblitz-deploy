@@ -1,4 +1,8 @@
 <div class="empty-state">
-  <h3>No leads yet</h3>
-  <p>Search for businesses to start finding leads</p>
+  <h3>{{ empty_title or 'No leads here yet' }}</h3>
+  <p>{{ empty_text or 'Search for local businesses to start building your list, or import one you already have.' }}</p>
+  <div class="row row-center">
+    <a href="/search" class="btn btn-primary btn-sm">Search for leads <span class="cost">· 1 credit</span></a>
+    <a href="/import" class="btn btn-secondary btn-sm">Import CSV</a>
+  </div>
 </div>

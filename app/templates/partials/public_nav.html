@@ -1,0 +1,39 @@
+{# Shared public nav (landing, /score, blog, contact, privacy). Sticky; same hamburger as the app nav. #}
+<nav class="landing-nav">
+  <div class="landing-container">
+    <a href="/" class="logo">LeadBlitz</a>
+    <button class="hamburger" type="button" aria-label="Menu" aria-controls="landing-menu" aria-expanded="false" data-menu-toggle="landing-menu">
+      <span></span><span></span><span></span>
+    </button>
+    <div class="landing-nav-links" id="landing-menu">
+      <a href="/#features">Features</a>
+      <a href="/#pricing">Pricing</a>
+      <a href="/#faq">FAQ</a>
+      <a href="/blog" {% if active_page == 'blog' %}aria-current="page"{% endif %}>Blog</a>
+      <a href="/score" {% if active_page == 'score' %}aria-current="page"{% endif %}>Free Score</a>
+      {% if user %}
+      <a href="/dashboard" class="btn btn-primary btn-sm">Dashboard</a>
+      {% else %}
+      <a href="/login">Login</a>
+      <a href="/register" class="btn btn-primary btn-sm">Start free</a>
+      {% endif %}
+    </div>
+  </div>
+</nav>
+<script>
+(function(){
+  var btn = document.querySelector('[data-menu-toggle="landing-menu"]');
+  var menu = document.getElementById('landing-menu');
+  if(!btn || !menu) return;
+  btn.addEventListener('click', function(){
+    var open = menu.classList.toggle('open');
+    btn.classList.toggle('open', open);
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  menu.querySelectorAll('a').forEach(function(a){
+    a.addEventListener('click', function(){
+      menu.classList.remove('open'); btn.classList.remove('open'); btn.setAttribute('aria-expanded', 'false');
+    });
+  });
+})();
+</script>

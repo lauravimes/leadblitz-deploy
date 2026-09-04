@@ -4,11 +4,12 @@
 {% block content %}
 <div class="section-header">
   <h1>Campaigns</h1>
-  <a href="/search" class="btn btn-primary btn-sm">New search</a>
+  <a href="/search" class="btn btn-primary btn-sm">New search <span class="cost">· 1 credit</span></a>
 </div>
 
 {% if campaigns %}
-<div class="card" style="padding:0">
+<p class="subtext mb-16">A campaign is one search (business type + location). Click one to see its leads.</p>
+<div class="card card-flush">
   {% for row in campaigns %}
   <a href="/leads?campaign_id={{ row.campaign.id }}" class="campaign-row">
     <div class="campaign-info">
@@ -25,8 +26,11 @@
 {% else %}
 <div class="empty-state">
   <h2>No campaigns yet</h2>
-  <p>Run your first search to create a campaign.</p>
-  <a href="/search" class="btn btn-primary" style="margin-top:16px">Search leads</a>
+  <p>Every search you run becomes a campaign so you can revisit its leads later.</p>
+  <div class="row row-center">
+    <a href="/search" class="btn btn-primary btn-sm">Run your first search <span class="cost">· 1 credit</span></a>
+    <a href="/import" class="btn btn-secondary btn-sm">Import CSV</a>
+  </div>
 </div>
 {% endif %}
 {% endblock %}

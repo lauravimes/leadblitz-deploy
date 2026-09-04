@@ -8,16 +8,16 @@
 </div>
 
 <div class="card">
-  <p class="subtext" style="margin-bottom:16px">Upload a CSV with columns: business_name, email, phone, website_url, notes. Only business_name or email is required — website_url is optional.</p>
+  <p class="subtext mb-16">Upload a CSV with columns: business_name, email, phone, website_url, notes. Only business_name or email is required — website_url is optional. Leads with a website are scored automatically after import (1 credit each).</p>
   <form hx-post="/api/csv/import" hx-target="#import-results" hx-swap="innerHTML" hx-encoding="multipart/form-data" hx-indicator="#import-indicator">
     <div class="form-group">
-      <label>CSV File</label>
-      <input type="file" name="file" accept=".csv" required>
+      <label for="csv-file">CSV file</label>
+      <input type="file" id="csv-file" name="file" accept=".csv,text/csv" required>
     </div>
     <button type="submit" class="btn btn-primary btn-sm">Upload &amp; import</button>
-    <span id="import-indicator" class="htmx-indicator">Processing...</span>
+    <span id="import-indicator" class="htmx-indicator ml-8">Processing...</span>
   </form>
 </div>
 
-<div id="import-results" style="margin-top:16px"></div>
+<div id="import-results" class="mt-16" aria-live="polite"></div>
 {% endblock %}

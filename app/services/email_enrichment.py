@@ -13,16 +13,6 @@ logger = logging.getLogger(__name__)
 
 EMAIL_REGEX = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b")
 
-PHONE_REGEX = re.compile(
-    r"(?:"
-    r"(?:0\d{2,4}[\s\-]?\d{3,4}[\s\-]?\d{3,4})|"
-    r"(?:\+44[\s\-]?\(?\d{1,4}\)?[\s\-]?\d{3,4}[\s\-]?\d{3,4})|"
-    r"(?:\+?1?[\s\-]?\(?\d{3}\)?[\s\-]?\d{3}[\s\-]?\d{4})|"
-    r"(?:\+\d{1,3}[\s\-]?\(?\d{1,4}\)?[\s\-]?\d{3,4}[\s\-]?\d{3,4})"
-    r")",
-    re.VERBOSE,
-)
-
 NOREPLY_PATTERNS = ["noreply@", "no-reply@", "donotreply@", "do-not-reply@", "mailer-daemon@"]
 PLACEHOLDER_EMAILS = {
     "example@yourmail.com", "test@example.com", "email@example.com",
@@ -30,10 +20,26 @@ PLACEHOLDER_EMAILS = {
     "admin@example.com", "contact@example.com", "test@test.com",
     "example@example.com", "name@domain.com", "email@domain.com",
 }
+# Placeholder / sample domains. Matched on the exact domain or a subdomain of it
+# (``x.example.com``) — never as a substring, so ``myemail.com`` is fine.
 INVALID_DOMAINS = [
-    "example.com", "domain.com", "email.com", "yoursite.com",
-    "test.com", "wixpress.com", "sentry.io", "yourmail.com",
+    "example.com", "example.org", "example.net", "domain.com", "email.com",
+    "yoursite.com", "test.com", "yourmail.com", "yourdomain.com", "mysite.com",
 ]
+# Site builders / infrastructure whose addresses leak into page footers and JS
+# bundles. Never the business's own contact address.
+PLATFORM_DOMAINS = [
+    "facebook.com", "wix.com", "wixpress.com", "squarespace.com", "godaddy.com",
+    "wordpress.com", "wordpress.org", "sentry.io", "sentry-next.wixpress.com",
+    "shopify.com", "weebly.com", "webflow.com", "duda.co", "google.com",
+    "googleapis.com", "gstatic.com", "w3.org", "schema.org", "jquery.com",
+    "cloudflare.com", "mailchimp.com", "hubspot.com",
+]
+# Regex matches that are really file names (``logo@2x.png``, ``main@1.0.js``).
+ASSET_SUFFIXES = (
+    ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico", ".js", ".css",
+    ".woff", ".woff2", ".ttf", ".json", ".map", ".pdf", ".mp4", ".webm",
+)
 GENERIC_PREFIXES = ["info", "contact", "hello", "support", "sales", "admin", "enquiries", "mail", "office"]
 CONTACT_PAGE_PATHS = [
     "/contact", "/contact-us", "/about",
@@ -53,10 +59,21 @@ def extract_domain(website: str) -> Optional[str]:
         if not website.startswith(("http://", "https://")):
             website = f"https://{website}"
         parsed = urlparse(website)
-        domain = parsed.netloc or parsed.path
-        return domain.replace("www.", "")
+        domain = (parsed.netloc or parsed.path).split("/")[0].split(":")[0].lower()
+        if domain.startswith("www."):
+            domain = domain[4:]
+        return domain or None
     except Exception:
         return None
+
+
+def _domain_matches(domain: str, blocked: str) -> bool:
+    return domain == blocked or domain.endswith("." + blocked)
+
+
+def is_blocked_domain(domain: str) -> bool:
+    domain = (domain or "").lower()
+    return any(_domain_matches(domain, d) for d in INVALID_DOMAINS + PLATFORM_DOMAINS)
 
 
 def _fetch_page(url: str, timeout: int = 10) -> Tuple[str, str]:
@@ -105,33 +122,25 @@ def _extract_emails_from_html(raw_html: str) -> set:
     return emails
 
 
-def _extract_phones_from_html(html: str) -> set:
-    phones = set()
-    if not html:
-        return phones
-    for phone in PHONE_REGEX.findall(html):
-        cleaned = re.sub(r"[\s\-\(\)]", "", phone)
-        if len(cleaned) >= 10:
-            phones.add(phone.strip())
-    return phones
-
-
 def _filter_emails(emails: set) -> List[str]:
-    filtered = []
+    filtered = set()
     for email in emails:
-        if not email or "@" not in email or "." not in email:
+        if not email or "@" not in email:
             continue
         email_lower = email.lower().strip()
+        local, _, domain = email_lower.rpartition("@")
+        if not local or "." not in domain:
+            continue
         if email_lower in PLACEHOLDER_EMAILS:
             continue
         if any(p in email_lower for p in NOREPLY_PATTERNS):
             continue
-        if any(d in email_lower for d in INVALID_DOMAINS):
+        if is_blocked_domain(domain):
             continue
-        if email.endswith((".png", ".jpg", ".gif", ".svg", ".webp", ".js", ".css")):
+        if email_lower.endswith(ASSET_SUFFIXES):
             continue
-        filtered.append(email)
-    return list(set(filtered))
+        filtered.add(email_lower)
+    return sorted(filtered)
 
 
 def extract_emails_from_website(website: str, timeout: int = 5) -> List[str]:
@@ -141,12 +150,14 @@ def extract_emails_from_website(website: str, timeout: int = 5) -> List[str]:
         if not website.startswith(("http://", "https://")):
             website = f"https://{website}"
 
+        own_domain = extract_domain(website)
+
         # Try homepage first — many sites have email right there
         _, home_html = _fetch_page(website, timeout=timeout)
         if home_html:
             home_emails = _filter_emails(_extract_emails_from_html(home_html))
             if home_emails:
-                return home_emails
+                return rank_emails(home_emails, own_domain)
 
         # Fallback: try a few common contact pages in parallel
         pages = [urljoin(website, p) for p in CONTACT_PAGE_PATHS]
@@ -163,45 +174,45 @@ def extract_emails_from_website(website: str, timeout: int = 5) -> List[str]:
                         continue
             except Exception:
                 pass
-        return _filter_emails(all_emails)
+        return rank_emails(_filter_emails(all_emails), own_domain)
     except Exception as e:
         logger.error(f"Error extracting emails from {website}: {e}")
         return []
 
 
-def choose_best_email(candidates: List[str]) -> Optional[str]:
+def _email_rank(email: str, own_domain: Optional[str]) -> int:
+    """Lower is better: own-domain generic (0) > own-domain any (1) >
+    other generic (2) > anything else (3)."""
+    local, _, domain = email.lower().rpartition("@")
+    own = bool(own_domain) and _domain_matches(domain, own_domain)
+    generic = local in GENERIC_PREFIXES
+    if own and generic:
+        return 0
+    if own:
+        return 1
+    if generic:
+        return 2
+    return 3
+
+
+def rank_emails(candidates: List[str], own_domain: Optional[str] = None) -> List[str]:
+    """Stable sort of candidates, best first (see ``_email_rank``)."""
+    own = extract_domain(own_domain) if own_domain else None
+    return sorted(candidates, key=lambda e: _email_rank(e, own))
+
+
+def choose_best_email(candidates: List[str], own_domain: Optional[str] = None) -> Optional[str]:
+    """Pick the address most likely to reach the business.
+
+    ``own_domain`` (the lead's website or bare domain) lets an address on the
+    business's own domain beat a site builder's or agency's footer address.
+    Without it the input order is preserved within each tier, so callers that
+    pass ``extract_emails_from_website`` output still get its own-domain-first
+    ordering.
+    """
     if not candidates:
         return None
-    generic = [e for e in candidates if e.split("@")[0].lower() in GENERIC_PREFIXES]
-    return generic[0] if generic else candidates[0]
-
-
-def extract_phone_from_website(website: str, timeout: int = 10) -> Optional[str]:
-    if not website:
-        return None
-    try:
-        if not website.startswith(("http://", "https://")):
-            website = f"https://{website}"
-        pages = [website] + [urljoin(website, p) for p in CONTACT_PAGE_PATHS]
-        all_phones = set()
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            futures = {executor.submit(_fetch_page, url, timeout): url for url in pages}
-            for future in as_completed(futures, timeout=timeout * 2):
-                try:
-                    _, html = future.result(timeout=timeout + 5)
-                    if html:
-                        all_phones.update(_extract_phones_from_html(html))
-                        tel_matches = re.findall(r'href=["\']tel:([^"\']+)["\']', html, re.IGNORECASE)
-                        for tel in tel_matches:
-                            cleaned = re.sub(r"[^\d+]", "", tel)
-                            if len(cleaned) >= 10:
-                                all_phones.add(tel.strip())
-                except Exception:
-                    continue
-        return list(all_phones)[0] if all_phones else None
-    except Exception as e:
-        logger.error(f"Error extracting phone from {website}: {e}")
-        return None
+    return rank_emails(candidates, own_domain)[0]
 
 
 def enrich_from_hunter(domain: str, max_results: int = 3, hunter_api_key: Optional[str] = None) -> Dict:

@@ -70,15 +70,21 @@ def _status_label(status: str) -> str:
     return {"good": "Good", "needs_attention": "Needs Attention", "critical": "Critical"}.get(status, "Unknown")
 
 
-def _header_footer(canvas, doc, title_text="Website Audit Report", agency_name=""):
+def _header_footer(canvas, doc, title_text="Website Audit Report", agency_name="", agency_website=""):
+    """Running header/footer. The header-left slot is the *agency's* name (from
+    the user's signature) — the client must never see the LeadBlitz brand."""
     canvas.saveState()
     canvas.setFont("Helvetica", 8)
     canvas.setFillColor(GRAY)
-    canvas.drawString(doc.leftMargin, doc.height + doc.topMargin + 12, agency_name or "LeadBlitz")
+    if agency_name:
+        canvas.drawString(doc.leftMargin, doc.height + doc.topMargin + 12, agency_name)
     canvas.drawRightString(doc.width + doc.leftMargin, doc.height + doc.topMargin + 12, title_text)
     canvas.setStrokeColor(LIGHT_GRAY)
     canvas.line(doc.leftMargin, doc.height + doc.topMargin + 8, doc.width + doc.leftMargin, doc.height + doc.topMargin + 8)
-    canvas.drawString(doc.leftMargin, 25, f"Generated {datetime.now().strftime('%B %d, %Y')}")
+    footer_left = f"Generated {datetime.now().strftime('%B %d, %Y')}"
+    if agency_website:
+        footer_left += f"  ·  {agency_website}"
+    canvas.drawString(doc.leftMargin, 25, footer_left)
     canvas.drawRightString(doc.width + doc.leftMargin, 25, f"Page {doc.page}")
     canvas.restoreState()
 
@@ -158,13 +164,19 @@ def generate_client_pdf(report_data: Dict[str, Any]) -> bytes:
     sections = report_data.get("sections", [])
     top_priorities = report_data.get("top_priorities", [])
     positive_highlights = report_data.get("positive_highlights", [])
-    agency_name = report_data.get("agency_name", "")
+    agency_name = report_data.get("agency_name", "") or ""
+    agency_website = report_data.get("agency_website", "") or ""
+    agency_contact = report_data.get("agency_contact", "") or ""
 
     doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=0.8 * inch, bottomMargin=0.6 * inch, leftMargin=0.75 * inch, rightMargin=0.75 * inch)
     story = []
 
     story.append(Paragraph("Website Audit Report", styles["ReportTitle"]))
-    story.append(Paragraph(f'Prepared for <b>{_safe(business_name)}</b><br/><font size="9" color="#9ca3af">{_safe(website)}</font>', styles["ReportSubtitle"]))
+    subtitle = f'Prepared for <b>{_safe(business_name)}</b><br/><font size="9" color="#9ca3af">{_safe(website)}</font>'
+    prepared_by = " · ".join(_safe(x) for x in (agency_name, agency_contact, agency_website) if x)
+    if prepared_by:
+        subtitle += f'<br/><font size="9" color="#6b7280">Prepared by {prepared_by}</font>'
+    story.append(Paragraph(subtitle, styles["ReportSubtitle"]))
     story.append(Spacer(1, 8))
     story.append(_build_score_table(score, grade, styles))
     story.append(Spacer(1, 16))
@@ -194,10 +206,13 @@ def generate_client_pdf(report_data: Dict[str, Any]) -> bytes:
             story.append(Paragraph(f'<font color="{DARK.hexval()}"><b>{i}.</b></font> {_safe(p)}', styles["BulletItem"]))
 
     story.append(Spacer(1, 20))
-    story.append(Paragraph("This report was generated automatically based on publicly available website data.", styles["FooterText"]))
+    closing = "This report is based on publicly available website data."
+    if agency_name:
+        closing = f"Prepared by {_safe(agency_name)}. " + closing
+    story.append(Paragraph(closing, styles["FooterText"]))
 
     def on_page(canvas, doc_ref):
-        _header_footer(canvas, doc_ref, "Website Audit Report", agency_name)
+        _header_footer(canvas, doc_ref, "Website Audit Report", agency_name, agency_website)
 
     doc.build(story, onFirstPage=on_page, onLaterPages=on_page)
     return buffer.getvalue()

@@ -7,6 +7,9 @@
     </div>
     <p class="label">Subject: {{ p.subject }}</p>
     <div style="font-size:.87rem;color:var(--muted);margin-top:4px;white-space:pre-line">{{ p.body }}</div>
+    {% if signature_html %}
+    <div style="font-size:.87rem;color:var(--muted);margin-top:12px;padding-top:8px;border-top:1px dashed var(--border, #e5e7eb)">{{ signature_html | safe }}</div>
+    {% endif %}
   </div>
   {% endfor %}
 {% else %}

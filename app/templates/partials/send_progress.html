@@ -1,25 +1,32 @@
+{# Context: job (SendJob), status (dict from send_jobs.job_progress) #}
 {% set total = status.total or 1 %}
 {% set done = status.sent + status.failed + status.skipped %}
 {% set pct = ((done / total) * 100) | int if total > 0 else 0 %}
+{% set active = status.status in ('queued', 'running') %}
 
-<div class="card card-compact">
+<div class="card card-compact" id="send-job-{{ job.id }}">
   <div class="progress-bar-container">
     <div class="progress-bar" style="width:{{ pct }}%"></div>
   </div>
   <div class="subtext" style="margin-top:8px">
-    {{ status.sent }} sent &middot; {{ status.failed }} failed &middot; {{ status.skipped }} skipped &middot; {{ total - done }} remaining
+    {{ status.sent }} sent &middot; {{ status.failed }} failed &middot; {{ status.skipped }} skipped &middot; {{ status.remaining }} remaining
     {% if status.send_rate %}
-    &middot; {{ status.send_rate }}/day limit
-    {% set remaining_emails = total - done %}
-    {% if remaining_emails > 0 and status.status != 'completed' %}
-    {% set days_left = (remaining_emails / status.send_rate) | round(1) %}
-    &middot; ~{{ days_left }} day{{ 's' if days_left != 1.0 }} left
-    {% endif %}
+      &middot; {{ status.send_rate }}/day
+      {% if active and status.next_send_at %}
+        &middot; next at {{ status.next_send_at.strftime('%H:%M UTC') }}
+        {% set days_left = (status.remaining / status.send_rate) %}
+        {% if days_left >= 1 %}&middot; ~{{ days_left | round(1) }} day{{ 's' if days_left | round(1) != 1.0 }} left{% endif %}
+      {% endif %}
     {% endif %}
     {% if status.status == 'completed' %}
-    <span class="saved-flash" style="margin-left:8px">Complete</span>
+      <span class="saved-flash" style="margin-left:8px">Complete</span>
+    {% elif status.status == 'cancelled' %}
+      <span class="subtext" style="margin-left:8px">Cancelled</span>
+    {% elif status.status == 'queued' %}
+      <span class="subtext" style="margin-left:8px">Starting…</span>
     {% endif %}
   </div>
+
   {% if status.errors %}
   <div style="margin-top:8px;font-size:.82rem;color:var(--red)">
     {% for err in status.errors %}
@@ -27,11 +34,18 @@
     {% endfor %}
   </div>
   {% endif %}
-  {% if status.status != 'completed' %}
-  <div hx-get="/api/email/send/{{ send_id }}/status"
-       hx-trigger="every {{ '30s' if status.send_rate else '3s' }}"
-       hx-target="closest .card"
-       hx-swap="outerHTML">
+
+  {% if active and status.remaining > 0 %}
+  <div style="margin-top:8px">
+    <button type="button" class="btn btn-secondary btn-sm"
+            hx-post="/api/email/send/{{ job.id }}/cancel"
+            hx-confirm="Stop sending the remaining {{ status.remaining }} email{{ 's' if status.remaining != 1 }}?"
+            hx-target="#send-job-{{ job.id }}"
+            hx-swap="outerHTML">Cancel remaining</button>
   </div>
+  <div hx-get="/api/email/send/{{ job.id }}/status"
+       hx-trigger="every {{ '30s' if status.send_rate else '3s' }}"
+       hx-target="#send-job-{{ job.id }}"
+       hx-swap="outerHTML"></div>
   {% endif %}
 </div>

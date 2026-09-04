@@ -4,7 +4,7 @@
 {% block content %}
 <div class="section-header">
   <h1>SMS outreach</h1>
-  <span class="subtext">2 credits per SMS</span>
+  <span class="subtext">No credits used — your Twilio account is billed per segment</span>
 </div>
 
 {% if is_bulk and bulk_leads %}
@@ -30,61 +30,77 @@
     </div>
   </details>
 </div>
-
-<div class="card">
-  <h2>Compose SMS</h2>
-  <p class="subtext" style="margin-bottom:16px">Use {{business_name}}, {{city}}, {{score}} as variables</p>
-  <form id="sms-form" style="margin-top:16px">
-    <input type="hidden" name="lead_ids" id="sms-lead-ids"
-           value="{{ bulk_leads | map(attribute='id') | join(',') }}">
-    <div class="form-group">
-      <label>Message template</label>
-      <textarea name="template" id="sms-template" rows="4" placeholder="Hi {{business_name}}, I noticed your website could use some updates. I help businesses in {{city}} grow online. Interested in a free chat?"></textarea>
-    </div>
-    <div style="display:flex;gap:8px">
-      <button type="button" class="btn btn-secondary btn-sm"
-              hx-post="/api/sms/preview"
-              hx-include="#sms-form"
-              hx-target="#sms-preview">Preview</button>
-      <button type="button" class="btn btn-primary btn-sm"
-              hx-post="/api/sms/send"
-              hx-include="#sms-form"
-              hx-target="#sms-status"
-              hx-confirm="Send SMS to {{ leads_with_phone | length }} lead{{ 's' if leads_with_phone | length != 1 }}? (2 credits each)">Send</button>
-    </div>
-    <span id="sms-status" style="margin-left:12px"></span>
-  </form>
-</div>
-
-{% else %}
-{# ───── SINGLE / EMPTY COMPOSE MODE ───── #}
-<div class="card">
-  <h2>Compose SMS</h2>
-  <p class="subtext" style="margin-bottom:16px">Use {{business_name}}, {{city}}, {{score}} as variables</p>
-  <form id="sms-form" style="margin-top:16px">
-    <div class="form-group">
-      <label>Message template</label>
-      <textarea name="template" id="sms-template" rows="4" placeholder="Hi {{business_name}}, I noticed your website could use some updates. I help businesses in {{city}} grow online. Interested in a free chat?"></textarea>
-    </div>
-    <div class="form-group">
-      <label>Lead IDs (comma separated)</label>
-      <input type="text" name="lead_ids" id="sms-lead-ids">
-    </div>
-    <div style="display:flex;gap:8px">
-      <button type="button" class="btn btn-secondary btn-sm"
-              hx-post="/api/sms/preview"
-              hx-include="#sms-form"
-              hx-target="#sms-preview">Preview</button>
-      <button type="button" class="btn btn-primary btn-sm"
-              hx-post="/api/sms/send"
-              hx-include="#sms-form"
-              hx-target="#sms-status"
-              hx-confirm="Send SMS to selected leads? (2 credits each)">Send</button>
-    </div>
-    <span id="sms-status" style="margin-left:12px"></span>
-  </form>
-</div>
 {% endif %}
 
+<div class="card">
+  <h2>Compose SMS</h2>
+  <p class="subtext" style="margin-bottom:16px">
+    Merge fields: <code>{% raw %}{{business_name}}{% endraw %}</code>,
+    <code>{% raw %}{{city}}{% endraw %}</code>,
+    <code>{% raw %}{{score}}{% endraw %}</code>,
+    <code>{% raw %}{{website}}{% endraw %}</code>
+  </p>
+  <form id="sms-form" style="margin-top:16px">
+    {% if is_bulk and bulk_leads %}
+    <input type="hidden" name="lead_ids" id="sms-lead-ids"
+           value="{{ bulk_leads | map(attribute='id') | join(',') }}">
+    {% endif %}
+    <div class="form-group">
+      <label for="sms-template">Message template</label>
+      <textarea name="template" id="sms-template" rows="4"
+                placeholder="Hi {% raw %}{{business_name}}{% endraw %}, I noticed your website could use some updates. I help businesses in {% raw %}{{city}}{% endraw %} grow online. Interested in a free chat?"></textarea>
+      <p class="subtext" id="sms-len" style="margin-top:4px">0 characters · 1 segment (160 characters per segment)</p>
+    </div>
+    {% if not (is_bulk and bulk_leads) %}
+    <div class="form-group">
+      <label for="sms-lead-ids">Lead IDs (comma separated)</label>
+      <input type="text" name="lead_ids" id="sms-lead-ids" placeholder="Select leads from the Leads page">
+    </div>
+    {% endif %}
+    <div class="form-group">
+      <label for="sms-region">Country for local numbers</label>
+      <select name="region" id="sms-region">
+        <option value="" selected>Auto-detect from the lead's address</option>
+        <option value="GB">United Kingdom (+44)</option>
+        <option value="US">United States / Canada (+1)</option>
+      </select>
+      <p class="subtext" style="margin-top:4px">Numbers are converted to international format before sending; ones that can't be parsed are skipped and reported.</p>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button type="button" class="btn btn-secondary btn-sm"
+              hx-post="/api/sms/preview"
+              hx-include="#sms-form"
+              hx-target="#sms-preview">Preview</button>
+      <button type="button" class="btn btn-primary btn-sm"
+              hx-post="/api/sms/send"
+              hx-include="#sms-form"
+              hx-target="#sms-status"
+              {% if is_bulk and bulk_leads %}
+              hx-confirm="Send SMS to {{ leads_with_phone | length }} lead{{ 's' if leads_with_phone | length != 1 }} via your Twilio account?"
+              {% else %}
+              hx-confirm="Send SMS to the selected leads via your Twilio account?"
+              {% endif %}>Send</button>
+    </div>
+    <div id="sms-status" style="margin-top:12px"></div>
+  </form>
+</div>
+
 <div id="sms-preview" style="margin-top:16px"></div>
+
+<script>
+(function(){
+  var ta=document.getElementById('sms-template'), hint=document.getElementById('sms-len');
+  if(!ta||!hint) return;
+  function update(){
+    var n=ta.value.length;
+    var seg = n===0 ? 1 : (n<=160 ? 1 : Math.ceil(n/153));
+    var txt = n+' character'+(n!==1?'s':'')+' · '+seg+' segment'+(seg!==1?'s':'')+' (160 characters per segment';
+    if(n>160) txt += '; long messages are split into 153-character parts and billed per part';
+    hint.textContent = txt+')';
+    hint.style.color = n>160 ? 'var(--amber, #b45309)' : '';
+  }
+  ta.addEventListener('input', update);
+  update();
+})();
+</script>
 {% endblock %}

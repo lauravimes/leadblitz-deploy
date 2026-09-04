@@ -1,47 +1,44 @@
 # LeadBlitz v2 — Fix plan (from REVIEW_2026-09-04.md)
 
-## Batch 1 — production-critical (main) ✅ dacbf1e
-- [x] Stripe webhook: `.to_dict()` for stripe ≥15, fail closed without secret, insert-first idempotency (unique on checkout session id), persist stripe_customer_id, Founding Member cap
-- [x] Passwords: cap at 72 bytes with a form error (bcrypt 5), pin bcrypt
-- [x] Server-side email validation (register, profile); escape admin HTML; validate admin amount
-- [x] Proxy headers middleware so `request.client.host` is the real client IP
-- [x] 401 → `HX-Redirect` for HTMX requests; `/health`; refuse default session secret
-- [x] Secure cookie on https; rate limits on login/register/forgot; forgot-password mail in background
-- [x] `decrypt()` only swallows InvalidToken
-- [x] Single `CREDIT_COSTS`
-- [x] Pin deps + requirements.txt lockfile; build.sh uses it
-- [x] Migration 007
+All batches below shipped on 4 Sep 2026. Test suite: `tests/` (81 tests).
 
-## Batch 2 — SSRF & abuse (main) ✅ dacbf1e
-- [x] `url_safety.safe_get` used by site_fetcher, email_enrichment, pagespeed
-- [x] Public score: rate-limit authenticated users too; `/api/pagespeed` rate-limited + cached
+## Batch 1 — production-critical ✅ dacbf1e
+- [x] Stripe webhook: stripe ≥15 compatible, fail closed without secret, insert-first idempotency, stripe_customer_id, Founding Member cap
+- [x] Passwords capped at 72 bytes (bcrypt 5); email validation; admin HTML escaped; proxy headers; HX-Redirect on 401; /health; rate limits; secure cookie; single CREDIT_COSTS; lockfile; migration 007
 
-## Batch 3 — credit correctness (main) ✅ 70e92be
-- [x] Scoring: claim leads, deduct after success / refund, no caching of failures, technographics in cache, re-score, batch error shown
-- [x] Search: charge only on new leads, expired token = error, fresh Load-more, scrape timeout safe
-- [x] CSV import: charge scoring, pending_credits, streaming size check, header aliases, GROUP BY, resume on startup
-- [x] Hunter: charge only on success, user key only, errors shown
-- [x] Dashboard SMS count; shared lead filters; bulk selections survive refresh
+## Batch 2 — SSRF & abuse ✅ dacbf1e
+- [x] `url_safety.safe_get` everywhere a user URL is fetched; public scorer limits + PageSpeed cache
+
+## Batch 3 — credit correctness ✅ 70e92be
+- [x] Scoring charge-after-success/refund, no cached failures, atomic batch claims, re-score; search charges only on new leads; CSV import charges + pending_credits + resume; Hunter user-key-only; shared lead filters
 
 ## Batch 4 — sessions ✅ 9910217
-- [x] Session revocation on password change; hashed reset tokens; OAuth state nonce + tz-aware expiry; dead code removed
+- [x] Session revocation on password change; hashed reset tokens; OAuth nonce; dead code removed
 
-## Agent A (worktree) — outreach
-- [ ] Email send → DB-backed jobs, non-blocking handler, `{% raw %}`, `{{score}}`, templates partial, signature, agency branding in PDF, report error check
-- [ ] SMS: commit tracking, E.164, city/score vars
-- [ ] Scrape quality, `_nl2br`, SMTP error wrapping, XSS escaping in report/email
+## Outreach (agent-a) ✅ 001e940
+- [x] Email sending via DB-backed `send_jobs` worker (survives restarts, cancel button, honest rate labels)
+- [x] Client report cached on the lead, agency-branded PDF, failure never emails an empty report, HTML escaped, sandboxed preview
+- [x] `{% raw %}` hints, `{{score}}`/`{{city}}` merge fields, templates partial + save form, signature append/pre-fill, text/plain part, provider errors wrapped
+- [x] SMS: tracking committed, E.164 via phonenumbers, per-lead errors, segment counter, correct cost label
+- [x] Scrape quality: exact-domain blacklist, platform domains, own-domain ranking
 
-## Agent B (worktree) — frontend
-- [ ] Global htmx error toast, loading states, cost labels, live credit badge, wide layout + lead rows, utility classes, first-run checklist, a11y, nav
+## Frontend (agent-b) ✅ 2f7a3cf
+- [x] Global error toast, loading states, cost labels, live credit badge, wide layout + lead rows, filters passed to bulk actions, first-run checklist, a11y, sticky nav, copy accuracy
 
-## After merge
-- [ ] lead_card / score_detail render `score_error`; public_score_result handles `has_errors`
-- [ ] Full test run + local smoke; push `origin` and `render`
+## After merge ✅
+- [x] lead_card / score_detail render `score_error`; public_score_result handles `has_errors`
+- [x] Full test run + local smoke (register, pages, scoring failure/refund, send job, SMS preview)
 
 ## Deploy checklist (Render dashboard — cannot be done from the repo)
-- [ ] Set `STRIPE_WEBHOOK_SECRET` (webhooks are now rejected without it; the success page still grants credits meanwhile)
+- [ ] Set `STRIPE_WEBHOOK_SECRET` (webhooks return 503 without it; the success page still grants credits meanwhile)
 - [ ] Confirm the Stripe webhook endpoint `https://leadblitz.co/api/stripe/webhook` subscribes to `checkout.session.completed` (+ `checkout.session.async_payment_succeeded`)
 - [ ] Health check path `/health`
 - [ ] Move `leadblitz-db` off the free plan before the 90-day deletion
 - [ ] After deploy: every user is logged out once (session token format changed)
 - [ ] Watch logs for `Startup recovery:` and `STRIPE_WEBHOOK_SECRET is not set`
+
+## Not done / follow-ups
+- [ ] Self-host htmx (currently unpkg without an integrity hash)
+- [ ] Gmail/Outlook OAuth still has no UI (routes fixed but unreachable); decide finish-or-delete
+- [ ] Batch progress / bulk selections still in-process memory (state is in DB; only the progress bar is lost on restart)
+- [ ] Old Python 3.9 `.venv` in the repo should be recreated with 3.11+

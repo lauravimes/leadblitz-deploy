@@ -24,7 +24,7 @@
   </div>
   <div class="lead-cell lead-cell-stage">
     <div class="lead-tags">
-      <span class="stage stage-{{ lead.stage }}">{{ lead.stage }}</span>
+      <span class="stage stage-{{ lead.stage }}">{{ stage_labels.get(lead.stage, lead.stage) }}</span>
       {% if lead.last_emailed_at %}
         <span class="emailed-badge">Emailed{% if lead.emails_sent_count > 1 %} ×{{ lead.emails_sent_count }}{% endif %}</span>
       {% endif %}
@@ -35,7 +35,7 @@
   </div>
   <div class="lead-actions">
     {% if lead.score is not none %}
-      <a href="/leads/{{ lead.id }}" class="btn btn-secondary btn-sm">Report</a>
+      <a href="/leads/{{ lead.id }}" class="btn btn-secondary btn-sm">Review &amp; outreach</a>
       {% if lead.website %}
       <button class="btn btn-secondary btn-sm score-btn" type="button"
               hx-post="/api/score/{{ lead.id }}"

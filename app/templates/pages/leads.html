@@ -54,10 +54,7 @@
   <label class="sr-only" for="filter-stage">Stage</label>
   <select id="filter-stage" onchange="filterLeads('stage', this.value)">
     <option value="" {{ 'selected' if not stage_filter }}>All stages</option>
-    <option value="new" {{ 'selected' if stage_filter == 'new' }}>New</option>
-    <option value="reviewing" {{ 'selected' if stage_filter == 'reviewing' }}>Reviewing</option>
-    <option value="qualified" {{ 'selected' if stage_filter == 'qualified' }}>Qualified</option>
-    <option value="rejected" {{ 'selected' if stage_filter == 'rejected' }}>Rejected</option>
+    {% for stage in lead_stages %}<option value="{{ stage }}" {{ 'selected' if stage_filter == stage }}>{{ stage_labels[stage] }}</option>{% endfor %}
   </select>
   {% if campaigns %}
   <label class="sr-only" for="filter-campaign">Campaign</label>

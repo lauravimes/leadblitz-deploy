@@ -43,6 +43,7 @@
 </div>
 {% endif %}
 
+{% include "partials/prospect_brief.html" %}
 <!-- Stage -->
 <div class="card">
   <div class="row gap-16">
@@ -50,10 +51,9 @@
     <select id="lead-stage" class="select-inline"
             hx-patch="/api/leads/{{ lead.id }}/stage" hx-target="#stage-confirm" hx-swap="innerHTML"
             name="stage">
-      <option value="new" {{ 'selected' if lead.stage == 'new' }}>New</option>
-      <option value="reviewing" {{ 'selected' if lead.stage == 'reviewing' }}>Reviewing</option>
-      <option value="qualified" {{ 'selected' if lead.stage == 'qualified' }}>Qualified</option>
-      <option value="rejected" {{ 'selected' if lead.stage == 'rejected' }}>Rejected</option>
+      {% for stage in lead_stages %}
+      <option value="{{ stage }}" {{ 'selected' if lead.stage == stage }}>{{ stage_labels[stage] }}</option>
+      {% endfor %}
     </select>
     <span id="stage-confirm" aria-live="polite"></span>
   </div>

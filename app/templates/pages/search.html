@@ -4,17 +4,22 @@
 
 {% block content %}
 <h1>Find leads</h1>
+{% if pilot_plan %}<div class="notice">Your plan is ready. Review the suggested business type and location below, then run your first search.</div>{% endif %}
+<div class="card"><h2>Your first outreach, in four steps</h2><ol>
+<li>Search one business type in one area.</li><li>Score a shortlist, then open a lead and check one observation yourself.</li>
+<li>Draft a short message. Copy it into your own inbox; connecting a mailbox is optional.</li>
+<li>Record contacted, replied, meeting and won on the lead so you can see what works.</li></ol></div>
 <p class="subtext mb-16">Search for local businesses by type and location. <strong>1 credit per search</strong> (up to 20 leads); we also scrape each website for an email address at no charge.</p>
 
 <div class="card">
   <form class="search-form" hx-post="/api/search" hx-target="#results" hx-swap="innerHTML" hx-indicator="#search-indicator">
     <div class="form-group mb-0">
       <label for="business_type">Business type</label>
-      <input type="text" id="business_type" name="business_type" placeholder="plumber, dentist, restaurant..." required>
+      <input type="text" id="business_type" name="business_type" placeholder="plumber, dentist, restaurant..." value="{{ pilot_niches.get(pilot_plan.answers.niche, '') if pilot_plan else '' }}" required>
     </div>
     <div class="form-group mb-0">
       <label for="location">Location</label>
-      <input type="text" id="location" name="location" placeholder="Manchester, London..." required>
+      <input type="text" id="location" name="location" placeholder="Manchester, London..." value="{{ pilot_plan.answers.location if pilot_plan else '' }}" required>
     </div>
     <button type="submit" class="btn btn-primary" title="Search · 1 credit">Search <span class="cost">· 1 credit</span></button>
   </form>

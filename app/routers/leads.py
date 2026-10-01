@@ -6,7 +6,11 @@ from fastapi.responses import HTMLResponse, Response
 from sqlalchemy.orm import Session
 
 from app.deps import get_db, get_current_user
-from app.models import Lead
+from app.models import Lead, LeadOutcome
+from app.services.prospect_brief import STAGES
+from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
+from fastapi import HTTPException
 from app.services.lead_filters import apply_lead_filters
 
 router = APIRouter(tags=["leads"])
@@ -62,11 +66,13 @@ def update_stage(
             "partials/error.html", {"request": request, "message": "Lead not found"}
         )
 
-    if stage not in ("new", "reviewing", "qualified", "rejected"):
+    if stage not in STAGES:
         return templates.TemplateResponse(
             "partials/error.html", {"request": request, "message": "Invalid stage"}
         )
 
+    if lead.stage != stage:
+        db.add(LeadOutcome(lead_id=lead.id, user_id=user.id, stage=stage))
     lead.stage = stage
     db.commit()
     db.refresh(lead)
@@ -232,3 +238,38 @@ def bulk_delete(
     response = HTMLResponse(f'<span class="saved-flash">{count_text}</span>')
     response.headers["HX-Trigger"] = "leadsDeleted"
     return response
+
+
+@router.patch("/leads/{lead_id}/observation")
+def save_observation(lead_id: str, request: Request, observation: str = Form(""), checked: str = Form(""), db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    lead = db.query(Lead).filter(Lead.id == lead_id, Lead.user_id == user.id).first()
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+    observation = observation.strip()
+    if len(observation) > 1000 or (observation and checked != "yes"):
+        raise HTTPException(422, "Keep the observation under 1,000 characters and confirm you checked it yourself.")
+    lead.verified_issue = observation or None
+    lead.verified_issue_at = datetime.now(timezone.utc) if observation else None
+    db.commit()
+    return HTMLResponse('<span class="saved-flash">Saved. The email writer will use this checked observation.</span>' if observation else '<span class="saved-flash">Observation cleared.</span>')
+
+
+@router.patch("/leads/{lead_id}/deal")
+def save_deal(lead_id: str, request: Request, value: str = Form(""), currency: str = Form("GBP"), db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    lead = db.query(Lead).filter(Lead.id == lead_id, Lead.user_id == user.id).first()
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+    if currency not in ("GBP", "USD", "EUR", "CAD", "AUD", "NZD"):
+        raise HTTPException(422, "Choose a supported currency.")
+    try:
+        amount = Decimal(value) if value.strip() else None
+        if amount is not None and (not amount.is_finite() or amount < 0 or amount > 10000000 or amount != amount.quantize(Decimal('0.01'))):
+            raise ValueError()
+        cents = int(amount * 100) if amount is not None else None
+    except (InvalidOperation, ValueError):
+        raise HTTPException(422, "Enter a non-negative project value with at most two decimal places.")
+    lead.deal_value_cents = cents; lead.deal_currency = currency
+    db.commit()
+    return HTMLResponse('<span class="saved-flash">Project value saved</span>')

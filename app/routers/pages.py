@@ -5,6 +5,7 @@ from sqlalchemy import func
 
 from app.deps import get_db, get_optional_user, get_current_user
 from app.models import User, Campaign, Lead, CsvImport
+from app.services.pilot import link_plan, NICHES
 
 router = APIRouter(tags=["pages"])
 
@@ -93,7 +94,9 @@ def search_page(request: Request, db: Session = Depends(get_db)):
     )
     return _tpl(request).TemplateResponse(
         "pages/search.html",
-        {"request": request, "user": user, "campaigns": campaigns, "active_page": "search"},
+        {"request": request, "user": user, "campaigns": campaigns, "active_page": "search",
+         "pilot_plan": link_plan(request, db, user),
+         "pilot_niches": NICHES},
     )
 
 

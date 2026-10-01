@@ -156,6 +156,16 @@ Best regards{% endset %}
   </form>
 </div>
 
+{% if prefill_lead and not is_bulk %}
+<div class="card"><h2>Use your own inbox</h2><p class="subtext">Review the draft above, then copy the subject and body. If you mention an attachment, attach it yourself. Mark the lead contacted only after you actually send.</p><button type="button" class="btn btn-secondary" id="copy-draft">Copy email draft</button><button type="button" class="btn btn-secondary" id="open-inbox">Open email app</button><span id="copy-status" class="ml-12" aria-live="polite"></span><p class="mt-12"><a href="/leads/{{ prefill_lead.id }}">Record the outcome on this lead →</a></p></div>
+<script>
+(function(){
+ const status=document.getElementById('copy-status');
+ document.getElementById('copy-draft').addEventListener('click',async()=>{const text='Subject: '+document.getElementById('email-subject').value+'\n\n'+document.getElementById('email-body').value;try{await navigator.clipboard.writeText(text);status.textContent='Copied. Review and send from your inbox.';}catch(e){status.textContent='Copy was blocked. Select the subject and body above to copy manually.';}});
+ document.getElementById('open-inbox').addEventListener('click',()=>{const recipient={{ (prefill_lead.email or '')|tojson }};if(!recipient){status.textContent='Add the recipient address in your email app.';}window.location.href='mailto:'+encodeURIComponent(recipient)+'?subject='+encodeURIComponent(document.getElementById('email-subject').value)+'&body='+encodeURIComponent(document.getElementById('email-body').value);});
+})();
+</script>
+{% endif %}
 <div id="email-preview" style="margin-top:16px"></div>
 
 <div class="card" style="margin-top:32px">

@@ -85,6 +85,10 @@ class Lead(Base):
 
     stage = Column(String(20), default="new", index=True)  # new / reviewing / qualified / rejected
     notes = Column(Text, default="")
+    verified_issue = Column(Text, nullable=True)
+    verified_issue_at = Column(DateTime(timezone=True), nullable=True)
+    deal_value_cents = Column(Integer, nullable=True)
+    deal_currency = Column(String(3), default="GBP")
     last_scored_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=_utcnow)
 
@@ -121,6 +125,36 @@ class ScoreCache(Base):
     final_score = Column(Integer, default=0)
     confidence = Column(Float, default=0.5)
     fetched_at = Column(DateTime(timezone=True), default=_utcnow)
+
+
+class PilotPlan(Base):
+    __tablename__ = "pilot_plans"
+    id = Column(String(36), primary_key=True, default=_uuid)
+    answers = Column(JSON, nullable=True)
+    source = Column(String(100), default="direct")
+    campaign = Column(String(100), default="")
+    content = Column(String(100), default="")
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    applicant_name = Column(String(120), nullable=True)
+    applicant_email = Column(String(254), nullable=True)
+    portfolio = Column(String(500), nullable=True)
+    ready_this_week = Column(Boolean, default=False)
+    applied_at = Column(DateTime(timezone=True), nullable=True)
+    status = Column(String(30), default="new")
+    admin_notes = Column(Text, default="")
+    notified_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class LeadOutcome(Base):
+    __tablename__ = "lead_outcomes"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    lead_id = Column(String(36), ForeignKey("leads.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    stage = Column(String(20), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
 
 
 # --- Credits & Payments ---

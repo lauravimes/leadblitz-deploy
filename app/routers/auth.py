@@ -148,6 +148,8 @@ def login(
         return _error(request, "Invalid email or password")
 
     response = Response(status_code=200)
+    from app.services.pilot import link_plan
+    link_plan(request, db, user)
     response.headers["HX-Redirect"] = "/search"
     return _set_session(request, response, user)
 
@@ -206,6 +208,8 @@ def register(
         redirect = "/credits?trial=withheld"
 
     response = Response(status_code=200)
+    from app.services.pilot import link_plan
+    link_plan(request, db, user)
     response.headers["HX-Redirect"] = redirect
     return _set_session(request, response, user)
 

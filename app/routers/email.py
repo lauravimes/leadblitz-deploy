@@ -166,13 +166,16 @@ def personalize_email(
         sig = db.query(EmailSignature).filter_by(user_id=user.id).first()
         base_pitch = sig.base_pitch if sig else ""
     if not base_pitch:
-        return JSONResponse({"error": "Add a base pitch to your signature first (below), then try again."}, status_code=400)
+        base_pitch = "I help local businesses improve their websites. Ask whether they would like a specific suggestion, without promising results."
 
     from app.services.ai_email import generate_personalized_email
+    from app.services.prospect_brief import prospect_brief
 
     try:
         result = generate_personalized_email(
-            {"name": lead.name, "website": lead.website, "score": lead.score},
+            {"name": lead.name, "website": lead.website, "score": lead.score,
+             "brief": prospect_brief(lead),
+             "score_breakdown": lead.score_breakdown or {}, "rating": lead.rating, "review_count": lead.review_count},
             base_pitch,
         )
     except Exception as exc:  # noqa: BLE001 — provider errors become a message, not a 500

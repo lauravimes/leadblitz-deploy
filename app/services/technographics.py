@@ -175,9 +175,9 @@ def classify_tech_health(technographics: Dict[str, Any]) -> Dict[str, List[Dict[
         red.append({"label": "No SSL", "detail": "Not using HTTPS"})
 
     if technographics.get("mobile_responsive"):
-        green.append({"label": "Responsive", "detail": "Mobile-friendly"})
+        green.append({"label": "Viewport tag detected", "detail": "Viewport metadata found; rendered layout not tested"})
     else:
-        red.append({"label": "Not Responsive", "detail": "No viewport meta"})
+        red.append({"label": "Check mobile layout", "detail": "No viewport tag detected; layout not tested"})
 
     cms = technographics.get("cms", {})
     cms_name = cms.get("name", "Unknown")

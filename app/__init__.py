@@ -42,6 +42,8 @@ def create_app() -> FastAPI:
 
     # Templates (shared instance)
     app.state.templates = Jinja2Templates(directory=BASE_DIR / "templates")
+    from app.services.prospect_brief import prospect_brief, STAGES, STAGE_LABELS
+    app.state.templates.env.globals.update(prospect_brief=prospect_brief, lead_stages=STAGES, stage_labels=STAGE_LABELS)
 
     @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(request: Request, exc: StarletteHTTPException):
@@ -65,10 +67,11 @@ def create_app() -> FastAPI:
     from app.routers import (
         pages, auth, search, leads, scoring,
         credits, settings, email, enrichment, sms,
-        csv, reports, analytics, admin, public_score,
+        csv, reports, analytics, admin, public_score, pilot,
     )
 
     app.include_router(public_score.router)
+    app.include_router(pilot.router)
     app.include_router(pages.router)
     app.include_router(auth.router, prefix="/auth")
     app.include_router(search.router, prefix="/api")

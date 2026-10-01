@@ -20,10 +20,11 @@
 {% else %}
 <div class="card mt-16">
   <div class="row row-between mb-16">
-    <h2 class="mb-0">Score breakdown</h2>
+    <h2 class="mb-0">Website quality signals</h2>
     <span class="score score-lg {{ 'score-high' if lead.score >= 70 else ('score-mid' if lead.score >= 40 else 'score-low') }}">{{ lead.score }}/100</span>
   </div>
 
+  <p class="notice">Higher scores indicate stronger website signals, not greater buying intent. This is a static HTML review; visual layout and working forms need a manual check. {% if breakdown.get('rendering_limitations') or breakdown.get('insufficient_evidence') %}<strong>Evidence is incomplete for this site.</strong>{% endif %}</p>
   <div class="row gap-24 mb-16">
     <div>
       <p class="label">Heuristic</p>
@@ -57,7 +58,7 @@
   <p class="label mt-24">AI review</p>
   <div class="breakdown-grid">
     <div class="breakdown-item"><span class="breakdown-label">Brand</span><span class="breakdown-score">{{ ai.get('brand', 0) }}/12</span></div>
-    <div class="breakdown-item"><span class="breakdown-label">Visual</span><span class="breakdown-score">{{ ai.get('visual', 0) }}/10</span></div>
+    <div class="breakdown-item"><span class="breakdown-label">Structure signals</span><span class="breakdown-score">{{ ai.get('visual', 0) }}/10</span></div>
     <div class="breakdown-item"><span class="breakdown-label">Conversion</span><span class="breakdown-score">{{ ai.get('conversion', 0) }}/12</span></div>
     <div class="breakdown-item"><span class="breakdown-label">Trust</span><span class="breakdown-score">{{ ai.get('trust', 0) }}/10</span></div>
     <div class="breakdown-item"><span class="breakdown-label">Accessibility</span><span class="breakdown-score">{{ ai.get('a11y', 0) }}/6</span></div>
@@ -90,7 +91,7 @@
   {% endif %}
 
   {% if report.get('weaknesses') %}
-  <p class="label mt-12">Weaknesses</p>
+  <p class="label mt-12">AI suggestions — verify before outreach</p>
   <ul class="report-list">
     {% for item in report.get('weaknesses', []) %}
     <li>{{ item }}</li>

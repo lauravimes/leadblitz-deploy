@@ -206,6 +206,8 @@ def score_website_hybrid(db: Session, url: str, api_key: str, use_cache: bool = 
         or (detection.get("is_js_heavy", False))
     )
 
+    heuristic["rendering_limitations"] = rendering_limitations
+
     # 6. AI scoring
     site_content = extract_site_content_for_ai(static_html, max_chars=6000)
     ai_review = score_with_ai(

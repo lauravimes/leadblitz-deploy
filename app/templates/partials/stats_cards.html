@@ -13,13 +13,13 @@
     <a href="/leads" class="card card-compact check-step">
       <span class="check-num">2</span>
       <h3>Score a website</h3>
-      <p>Score any lead to audit its site across 11 dimensions. Low scores are your best prospects — the report writes the pitch for you.</p>
+      <p>Score any lead to audit its site across 11 dimensions. A low score is a signal to investigate. Check the business fit and verify an observation before writing.</p>
       <span class="cost">1 credit per lead</span>
     </a>
     <a href="/leads?scored=1" class="card card-compact check-step">
       <span class="check-num">3</span>
-      <h3>Send the report</h3>
-      <p>Open a scored lead, download the PDF audit or email it with an AI-written note. Track replies with stages and notes.</p>
+      <h3>Prepare the first message</h3>
+      <p>Open a lead, save a checked observation and draft a short message. Copy it into your inbox or send in the app, then record what happens.</p>
       <span class="cost">Email send is free · AI-written email 1 credit</span>
     </a>
   </div>
@@ -73,3 +73,5 @@
 </div>
 {% endif %}
 {% endif %}
+
+<div class="card mt-16"><h2>Recorded sales outcomes</h2><p class="subtext">Update each lead after contact. These are user-recorded outcomes; email sends do not imply replies.</p><div class="row gap-16">{% for stage in ['contacted','replied','meeting','proposal','won'] %}<div><p class="label">{{ stage_labels[stage] }}</p><strong>{{ milestones.get(stage,0) }}</strong></div>{% endfor %}</div>{% for currency,cents in won_values %}<p>Currently won project value: {{ currency or 'GBP' }} {{ '%.2f'|format(cents/100) }}</p>{% endfor %}</div>

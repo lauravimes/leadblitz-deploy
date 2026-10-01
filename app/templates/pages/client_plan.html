@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Find your next web design prospects — LeadBlitz</title><meta name="description" content="Answer five quick questions for your free prospecting plan. Apply to join five designers in a hands-on LeadBlitz pilot.">
+<link rel="icon" href="/static/favicon.svg"><link rel="stylesheet" href="/static/style.css"><link rel="stylesheet" href="/static/landing.css"><link rel="stylesheet" href="/static/pilot.css"></head>
+<body>{% include "partials/public_nav.html" %}<main class="pilot-shell">
+<div class="pilot-intro"><p class="pilot-eyebrow">YOUR NEXT CLIENT STARTS WITH A PLAN</p><h1>Where will your next<br> web design client come from?</h1><p class="pilot-lede">Tell us what you build and where you get stuck. Get a practical starting point for finding local businesses you could help.</p><p class="subtext">5 questions · Free plan · See your result without signing up</p></div>
+<form action="/client-plan" method="post" id="plan-form" class="pilot-card">
+<input type="hidden" name="csrf" value="{{ csrf }}"><p id="step-label" class="pilot-eyebrow" hidden></p><progress id="plan-progress" max="5" value="1" hidden aria-label="Questionnaire progress"></progress>
+{% set questions = [('experience','Where are you with web design?'), ('offer','What would you like to sell?'), ('obstacle','What is the hardest part of finding clients?'), ('niche','Which businesses would you like to help?')] %}
+{% for key, label in questions %}<fieldset class="plan-step"><legend>{{ label }}</legend><div class="pilot-options">{% for value, text in options[key].items() %}<label class="pilot-option"><input type="radio" name="{{ key }}" value="{{ value }}" required {% if plan.answers and plan.answers.get(key)==value %}checked{% endif %}><span>{{ text }}</span></label>{% endfor %}</div></fieldset>{% endfor %}
+<fieldset class="plan-step"><legend>Where would you like to find clients?</legend><label for="plan-location">Town or city, and country</label><input id="plan-location" name="location" type="text" minlength="2" maxlength="120" placeholder="For example, Reading, UK" value="{{ plan.answers.location if plan.answers else '' }}" required><p class="subtext mt-8">We'll use this to prepare your first search. You can change it later.</p></fieldset>
+<p id="plan-error" class="error-msg" role="alert" hidden></p>
+<div class="pilot-controls"><button type="button" id="plan-back" class="btn btn-secondary" hidden>Back</button><button type="button" id="plan-next" class="btn btn-primary" hidden>Continue</button><button type="submit" id="plan-submit" class="btn btn-primary">See my prospecting plan</button></div>
+<p class="pilot-small">Your answers help tailor the plan. We remember progress and campaign source to improve this experience. <a href="/privacy">Privacy</a></p></form>
+<div class="pilot-note"><strong>Want to try it together?</strong><p>We're recruiting five web designers for a free 30-minute session with LeadBlitz's founder. We'll work towards a shortlist of five prospects and specific first messages. You can apply after seeing your plan.</p><p>No promise of clients or earnings. The pilot is about testing the workflow with real outreach.</p></div>
+<p class="pilot-bottom"><a href="/register">Already know what you need? Go straight to LeadBlitz →</a></p></main>
+<script src="/static/pilot.js" defer></script></body></html>

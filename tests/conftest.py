@@ -44,7 +44,7 @@ def client(app):
 
 
 TRUNCATE_TABLES = [
-    "send_job_items", "send_jobs", "credit_transactions", "payments", "user_credits",
+    "pilot_plans", "lead_outcomes", "send_job_items", "send_jobs", "credit_transactions", "payments", "user_credits",
     "leads", "campaigns", "csv_imports", "email_templates", "email_signatures",
     "email_settings", "user_api_keys", "user_subscriptions", "credit_states", "users",
     "score_cache",

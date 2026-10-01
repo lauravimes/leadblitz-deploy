@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from app.deps import get_db, get_current_user
-from app.models import Lead, Campaign
+from app.models import Lead, Campaign, LeadOutcome
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["analytics"])
@@ -39,11 +39,14 @@ def dashboard_stats(request: Request, db: Session = Depends(get_db)):
 
     total_campaigns = db.query(func.count(Campaign.id)).filter(Campaign.user_id == uid).scalar() or 0
 
+    milestones = dict(db.query(LeadOutcome.stage, func.count(func.distinct(LeadOutcome.lead_id))).filter(LeadOutcome.user_id == uid).group_by(LeadOutcome.stage).all())
+    won_values = db.query(Lead.deal_currency, func.sum(Lead.deal_value_cents)).filter(Lead.user_id == uid, Lead.stage == "won", Lead.deal_value_cents.isnot(None)).group_by(Lead.deal_currency).all()
     templates = request.app.state.templates
     return templates.TemplateResponse(
         "partials/stats_cards.html",
         {
             "request": request,
+            "milestones": milestones, "won_values": won_values,
             "total_leads": total_leads or 0,
             "scored_leads": scored_leads or 0,
             "avg_score": round(float(avg_score or 0), 1),

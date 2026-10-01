@@ -36,6 +36,8 @@ def upgrade() -> None:
         "credit_transactions",
         ["stripe_checkout_session_id"],
         unique=True,
+        # Production can have this index already while its migration stamp is 005.
+        if_not_exists=True,
         postgresql_where=sa.text("stripe_checkout_session_id IS NOT NULL"),
     )
 
